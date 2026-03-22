@@ -1,6 +1,6 @@
 import type { PhaseType } from '../../types/tournament'
 
-const phaseTypes: { type: PhaseType; label: string; description: string; color: string }[] = [
+const phaseTypes: { type: PhaseType; label: string; description: string; color: string; disabled?: boolean }[] = [
   {
     type: 'round_robin',
     label: 'Poule',
@@ -16,8 +16,9 @@ const phaseTypes: { type: PhaseType; label: string; description: string; color: 
   {
     type: 'super_americana',
     label: 'Super Americana',
-    description: 'Format mixte',
+    description: 'Format mixte (bientôt)',
     color: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    disabled: true,
   },
 ]
 
@@ -32,13 +33,17 @@ export default function Sidebar() {
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
         Phases
       </p>
-      {phaseTypes.map(({ type, label, description, color }) => (
+      {phaseTypes.map(({ type, label, description, color, disabled }) => (
         <div
           key={type}
-          draggable
-          onDragStart={(e) => onDragStart(e, type)}
-          className={`border rounded-lg px-3 py-2.5 cursor-grab active:cursor-grabbing
-            transition-transform duration-150 hover:scale-[1.02] hover:shadow-sm ${color}`}
+          draggable={!disabled}
+          onDragStart={disabled ? undefined : (e) => onDragStart(e, type)}
+          className={`border rounded-lg px-3 py-2.5
+            transition-transform duration-150 ${color}
+            ${disabled
+              ? 'opacity-40 cursor-not-allowed grayscale'
+              : 'cursor-grab active:cursor-grabbing hover:scale-[1.02] hover:shadow-sm'
+            }`}
         >
           <p className="text-sm font-medium">{label}</p>
           <p className="text-[11px] opacity-70">{description}</p>
