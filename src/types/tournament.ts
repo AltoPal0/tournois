@@ -80,5 +80,7 @@ export interface Match {
   piste: number | null
   ordre: number
   round: number | null
+  score_equipe1: number | null
+  score_equipe2: number | null
   created_at: string
 }

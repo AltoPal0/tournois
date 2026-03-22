@@ -83,8 +83,45 @@ function parseHandleIndex(handle: string): number {
 }
 
 // ---------------------------------------------------------------------------
-// Round Robin : N*(N-1)/2 matchs
+// Round Robin : algorithme du cercle (circle method)
+// Chaque tour, chaque équipe joue exactement une fois → repos garanti entre
+// les matchs, et temps d'attente minimal.
 // ---------------------------------------------------------------------------
+
+/**
+ * Algorithme du cercle : fixe la dernière équipe, fait tourner les autres.
+ * Retourne un tableau de tours, chaque tour contenant des paires [slot1, slot2].
+ * Si N est impair, un bye est ajouté puis filtré.
+ */
+function circleSchedule(n: number): [number, number][][] {
+  const isOdd = n % 2 !== 0
+  const total = isOdd ? n + 1 : n
+  const fixed = total // dernière équipe fixée
+  const rotating = Array.from({ length: total - 1 }, (_, i) => i + 1)
+
+  const rounds: [number, number][][] = []
+
+  for (let r = 0; r < total - 1; r++) {
+    const round: [number, number][] = []
+    // Match fixe : fixed vs premier du rotating
+    round.push([fixed, rotating[0]])
+    // Paires restantes : de l'extérieur vers l'intérieur
+    for (let i = 1; i < total / 2; i++) {
+      round.push([rotating[i], rotating[total - 1 - i]])
+    }
+    rounds.push(round)
+    // Rotation : décaler d'un cran
+    rotating.push(rotating.shift()!)
+  }
+
+  // Filtrer les byes (équipe > n) si N impair
+  if (isOdd) {
+    return rounds.map((round) =>
+      round.filter(([a, b]) => a <= n && b <= n),
+    )
+  }
+  return rounds
+}
 
 function generateRoundRobinMatches(
   node: SerializedNode,
@@ -98,22 +135,27 @@ function generateRoundRobinMatches(
   let ordre = 1
 
   const provenanceBySlot = new Map(provenances.map((p) => [p.inputIndex, p.label]))
+  const schedule = circleSchedule(n)
 
-  for (let i = 1; i <= n; i++) {
-    for (let j = i + 1; j <= n; j++) {
+  for (let tour = 0; tour < schedule.length; tour++) {
+    const round = schedule[tour]
+    for (let m = 0; m < round.length; m++) {
+      const [slot1, slot2] = round[m]
       matches.push({
         tournament_id: tournamentId,
         phase_node_id: node.id,
-        nom: `Match ${ordre} de ${config.name}`,
+        nom: `Tour ${tour + 1} Match ${m + 1} de ${config.name}`,
         statut: 'a_jouer',
         equipe1_id: null,
         equipe2_id: null,
-        equipe1_label: isRoot ? null : (provenanceBySlot.get(i) ?? null),
-        equipe2_label: isRoot ? null : (provenanceBySlot.get(j) ?? null),
+        equipe1_label: isRoot ? null : (provenanceBySlot.get(slot1) ?? null),
+        equipe2_label: isRoot ? null : (provenanceBySlot.get(slot2) ?? null),
         horaire: null,
         piste: null,
         ordre,
-        round: null,
+        round: tour + 1,
+        score_equipe1: null,
+        score_equipe2: null,
       })
       ordre++
     }
@@ -200,6 +242,8 @@ function generateEliminationMatches(
           piste: null,
           ordre,
           round,
+          score_equipe1: null,
+          score_equipe2: null,
         })
         ordre++
       } else {
@@ -240,6 +284,8 @@ function generateEliminationMatches(
           piste: null,
           ordre,
           round,
+          score_equipe1: null,
+          score_equipe2: null,
         })
         ordre++
       }
@@ -288,6 +334,47 @@ function getInternalProvenance(
     return `Vainqueur ${prevMatchName}`
   }
   return `Vainqueur match ${childMatchIdx + 1}`
+}
+
+// ---------------------------------------------------------------------------
+// Calcul des slots d'entrée par match (pour l'assignation d'équipes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Pour une phase racine, retourne les paires de slots d'entrée pour chaque match
+ * dans l'ordre de génération (ordre). Seuls les matchs avec des slots directs
+ * sont retournés (round robin: tous, élimination: round 1 uniquement).
+ */
+export function computeInputSlotPairs(
+  phaseType: 'round_robin' | 'elimination',
+  inputCount: number,
+): { ordre: number; slot1: number; slot2: number }[] {
+  const pairs: { ordre: number; slot1: number; slot2: number }[] = []
+
+  if (phaseType === 'round_robin') {
+    const schedule = circleSchedule(inputCount)
+    let ordre = 1
+    for (const round of schedule) {
+      for (const [slot1, slot2] of round) {
+        pairs.push({ ordre, slot1, slot2 })
+        ordre++
+      }
+    }
+  } else {
+    // Élimination : seul le round 1 a des slots d'entrée directs
+    const bracketSize = Math.pow(2, Math.ceil(Math.log2(inputCount)))
+    const matchesInRound1 = bracketSize / 2
+    let ordre = 1
+    for (let m = 0; m < matchesInRound1; m++) {
+      const slot1 = m * 2 + 1
+      const slot2 = m * 2 + 2
+      if (slot1 > inputCount || slot2 > inputCount) continue // bye
+      pairs.push({ ordre, slot1, slot2 })
+      ordre++
+    }
+  }
+
+  return pairs
 }
 
 // ---------------------------------------------------------------------------

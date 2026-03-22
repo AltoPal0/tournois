@@ -1,43 +1,25 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useCallback, useState } from 'react'
 import { useParams, Link } from 'react-router'
 import { useMatchStore } from '../store/matchStore'
 import { useTournamentStore } from '../store/tournamentStore'
-import type { Match } from '../types/tournament'
-
-function StatusBadge({ statut }: { statut: Match['statut'] }) {
-  const styles =
-    statut === 'a_jouer'
-      ? 'bg-amber-50 text-amber-700 border-amber-200'
-      : 'bg-green-50 text-green-700 border-green-200'
-  const label = statut === 'a_jouer' ? 'À jouer' : 'Terminé'
-  return (
-    <span className={`inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full border ${styles}`}>
-      {label}
-    </span>
-  )
-}
-
-function TeamLabel({ label, teamId }: { label: string | null; teamId: string | null }) {
-  if (teamId) {
-    // TODO: afficher le nom de l'équipe quand assignée
-    return <span className="text-sm text-gray-900">Équipe assignée</span>
-  }
-  if (label) {
-    return <span className="text-sm text-gray-400 italic">{label}</span>
-  }
-  return <span className="text-sm text-gray-300 italic">À assigner</span>
-}
+import { supabase } from '../lib/supabase'
+import type { TeamWithJoueurs, TournamentGraph, PhaseType } from '../types/tournament'
+import PhaseSection from '../components/matches/PhaseSection'
 
 export default function TournamentMatchesPage() {
   const { id } = useParams<{ id: string }>()
   const matches = useMatchStore((s) => s.matches)
   const isLoading = useMatchStore((s) => s.isLoading)
+  const isAssigning = useMatchStore((s) => s.isAssigning)
   const loadMatches = useMatchStore((s) => s.loadMatches)
+  const assignRandomTeams = useMatchStore((s) => s.assignRandomTeams)
   const resetMatches = useMatchStore((s) => s.reset)
   const tournamentName = useTournamentStore((s) => s.tournamentName)
   const loadTournament = useTournamentStore((s) => s.loadTournament)
   const resetTournament = useTournamentStore((s) => s.reset)
   const nodes = useTournamentStore((s) => s.nodes)
+  const edges = useTournamentStore((s) => s.edges)
+  const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
 
   useEffect(() => {
     if (id) {
@@ -50,14 +32,52 @@ export default function TournamentMatchesPage() {
     }
   }, [id, loadTournament, loadMatches, resetMatches, resetTournament])
 
-  // Grouper les matchs par phase
+  // Charger les équipes avec noms de joueurs
+  useEffect(() => {
+    async function fetchTeams() {
+      const { data } = await supabase
+        .from('tt_teams')
+        .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
+      if (data) {
+        const map = new Map<string, TeamWithJoueurs>()
+        for (const t of data as unknown as TeamWithJoueurs[]) {
+          map.set(t.id, t)
+        }
+        setTeamsMap(map)
+      }
+    }
+    fetchTeams()
+  }, [matches])
+
+  const hasUnassignedMatches = useMemo(
+    () => matches.some((m) => !m.equipe1_id && !m.equipe1_label),
+    [matches],
+  )
+
+  const handleAssignRandom = useCallback(() => {
+    if (!id) return
+    const graph: TournamentGraph = {
+      nodes: nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
+      edges: edges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        sourceHandle: e.sourceHandle!,
+        target: e.target,
+        targetHandle: e.targetHandle!,
+      })),
+    }
+    assignRandomTeams(id, graph)
+  }, [id, nodes, edges, assignRandomTeams])
+
+  // Grouper les matchs par phase avec le type
   const matchesByPhase = useMemo(() => {
-    const groups = new Map<string, { name: string; matches: Match[] }>()
+    const groups = new Map<string, { name: string; type: PhaseType; matches: typeof matches }>()
     for (const match of matches) {
       if (!groups.has(match.phase_node_id)) {
         const node = nodes.find((n) => n.id === match.phase_node_id)
         groups.set(match.phase_node_id, {
           name: node?.data.config.name ?? match.phase_node_id,
+          type: node?.data.config.type ?? 'round_robin',
           matches: [],
         })
       }
@@ -86,8 +106,29 @@ export default function TournamentMatchesPage() {
           <span className="text-xs text-gray-400 ml-2">— Matchs</span>
         </div>
 
-        <div className="text-xs text-gray-400">
-          {matches.length} match{matches.length > 1 ? 's' : ''}
+        <div className="flex items-center gap-3">
+          {hasUnassignedMatches && (
+            <button
+              onClick={handleAssignRandom}
+              disabled={isAssigning}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg
+                transition-all duration-200
+                disabled:opacity-40 disabled:cursor-not-allowed
+                bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98]"
+            >
+              {isAssigning ? (
+                <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" />
+                </svg>
+              )}
+              Assigner aléatoirement
+            </button>
+          )}
+          <span className="text-xs text-gray-400">
+            {matches.length} match{matches.length > 1 ? 's' : ''}
+          </span>
         </div>
       </div>
 
@@ -105,58 +146,15 @@ export default function TournamentMatchesPage() {
             </Link>
           </div>
         ) : (
-          <div className="max-w-4xl mx-auto space-y-8">
-            {matchesByPhase.map(({ name, matches: phaseMatches }) => (
-              <section key={name}>
-                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">
-                  {name}
-                  <span className="ml-2 text-gray-400 font-normal normal-case">
-                    ({phaseMatches.length} match{phaseMatches.length > 1 ? 's' : ''})
-                  </span>
-                </h2>
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-                        <th className="text-left px-4 py-2.5">Match</th>
-                        <th className="text-left px-4 py-2.5">Équipe 1</th>
-                        <th className="text-left px-4 py-2.5">Équipe 2</th>
-                        <th className="text-left px-4 py-2.5">Horaire</th>
-                        <th className="text-left px-4 py-2.5">Piste</th>
-                        <th className="text-left px-4 py-2.5">Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {phaseMatches.map((match) => (
-                        <tr
-                          key={match.id}
-                          className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50
-                            transition-colors duration-100"
-                        >
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                            {match.nom}
-                          </td>
-                          <td className="px-4 py-3">
-                            <TeamLabel label={match.equipe1_label} teamId={match.equipe1_id} />
-                          </td>
-                          <td className="px-4 py-3">
-                            <TeamLabel label={match.equipe2_label} teamId={match.equipe2_id} />
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-400">
-                            {match.horaire ?? '—'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-400">
-                            {match.piste ?? '—'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <StatusBadge statut={match.statut} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+          <div className="max-w-4xl mx-auto space-y-10">
+            {matchesByPhase.map(({ name, type, matches: phaseMatches }) => (
+              <PhaseSection
+                key={name}
+                name={name}
+                type={type}
+                matches={phaseMatches}
+                teamsMap={teamsMap}
+              />
             ))}
           </div>
         )}
