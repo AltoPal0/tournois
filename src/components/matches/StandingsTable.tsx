@@ -6,54 +6,96 @@ interface StandingsTableProps {
   teamsMap: Map<string, TeamWithJoueurs>
 }
 
-export default function StandingsTable({ standings, teamsMap }: StandingsTableProps) {
-  if (standings.length === 0) return null
-
+function TeamName({ teamId, teamsMap }: { teamId: string; teamsMap: Map<string, TeamWithJoueurs> }) {
+  const team = teamsMap.get(teamId)
+  if (!team) return <span className="text-gray-300 italic text-xs">À assigner</span>
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-            <th className="text-center px-3 py-2.5 w-8">#</th>
-            <th className="text-left px-4 py-2.5">Équipe</th>
-            <th className="text-center px-2 py-2.5 w-10">J</th>
-            <th className="text-center px-2 py-2.5 w-10">V</th>
-            <th className="text-center px-2 py-2.5 w-10">D</th>
-            <th className="text-center px-2 py-2.5 w-12">Pts</th>
-            <th className="text-center px-2 py-2.5 w-14">+/-</th>
-          </tr>
-        </thead>
-        <tbody>
+    <span className="text-sm font-medium text-gray-900">
+      {team.joueur1.prenom} <span className="text-gray-400 font-normal">&</span> {team.joueur2.prenom}
+    </span>
+  )
+}
+
+export default function StandingsTable({ standings, teamsMap }: StandingsTableProps) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+
+      {/* En-tête */}
+      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Classement</span>
+        <div className="flex gap-4">
+          {['J', 'V', 'D', 'Pts'].map((h) => (
+            <span key={h} className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider w-6 text-center">
+              {h}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {standings.length === 0 ? (
+        <div className="px-4 py-4 text-xs text-gray-300 italic text-center">
+          Aucune équipe assignée
+        </div>
+      ) : (
+        <div className="divide-y divide-gray-50">
           {standings.map((row, i) => {
-            const team = teamsMap.get(row.teamId)
+            const hasPlayed = row.played > 0
+            const isLeader = i === 0 && hasPlayed
             const diff = row.gamesWon - row.gamesLost
-            const isFirst = i === 0 && row.points > 0
 
             return (
-              <tr
+              <div
                 key={row.teamId}
-                className={`border-b border-gray-50 last:border-0 transition-colors duration-100
-                  ${isFirst ? 'bg-blue-50/40' : 'hover:bg-gray-50/50'}`}
+                className={`px-4 py-2.5 flex items-center gap-3
+                  ${isLeader ? 'bg-blue-50/50' : ''}`}
               >
-                <td className="text-center px-3 py-2.5 text-xs font-semibold text-gray-400">
+                {/* Rang */}
+                <span className={`text-xs font-bold w-5 shrink-0 text-center
+                  ${isLeader ? 'text-blue-500' : 'text-gray-300'}`}>
                   {i + 1}
-                </td>
-                <td className="px-4 py-2.5 text-sm font-medium text-gray-900">
-                  {team ? `${team.joueur1.prenom} & ${team.joueur2.prenom}` : row.teamId.slice(0, 8)}
-                </td>
-                <td className="text-center px-2 py-2.5 text-sm text-gray-500">{row.played}</td>
-                <td className="text-center px-2 py-2.5 text-sm text-gray-500">{row.wins}</td>
-                <td className="text-center px-2 py-2.5 text-sm text-gray-500">{row.losses}</td>
-                <td className="text-center px-2 py-2.5 text-sm font-semibold text-gray-900">{row.points}</td>
-                <td className={`text-center px-2 py-2.5 text-sm font-medium
-                  ${diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                  {diff > 0 ? '+' : ''}{diff}
-                </td>
-              </tr>
+                </span>
+
+                {/* Nom */}
+                <div className="flex-1 min-w-0 truncate">
+                  <TeamName teamId={row.teamId} teamsMap={teamsMap} />
+                </div>
+
+                {/* Stats */}
+                <div className="flex gap-4 shrink-0">
+                  <span className="text-sm text-gray-500 w-6 text-center">{row.played}</span>
+                  <span className="text-sm text-gray-500 w-6 text-center">{row.wins}</span>
+                  <span className="text-sm text-gray-500 w-6 text-center">{row.losses}</span>
+                  <span className={`text-sm font-bold w-6 text-center
+                    ${isLeader ? 'text-blue-600' : row.points > 0 ? 'text-gray-800' : 'text-gray-300'}`}>
+                    {hasPlayed ? row.points : (
+                      <span className="text-gray-200 font-normal text-xs">—</span>
+                    )}
+                  </span>
+                </div>
+              </div>
             )
           })}
-        </tbody>
-      </table>
+        </div>
+      )}
+
+      {/* Légende diff jeux (compacte) */}
+      {standings.some((r) => r.played > 0) && (
+        <div className="px-4 py-2 border-t border-gray-50 flex gap-3 flex-wrap">
+          {standings.filter((r) => r.played > 0).map((row) => {
+            const diff = row.gamesWon - row.gamesLost
+            const team = teamsMap.get(row.teamId)
+            if (!team) return null
+            return (
+              <span key={row.teamId} className="text-[11px] text-gray-400">
+                {team.joueur1.prenom.slice(0, 3)}.{' '}
+                <span className={diff > 0 ? 'text-green-600 font-medium' : diff < 0 ? 'text-red-500 font-medium' : 'text-gray-400'}>
+                  {diff > 0 ? '+' : ''}{diff}
+                </span>
+              </span>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

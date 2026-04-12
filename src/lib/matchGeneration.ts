@@ -11,7 +11,7 @@ interface ProvenanceSlot {
 // Tri topologique (Kahn) — phases racine d'abord
 // ---------------------------------------------------------------------------
 
-function topologicalSort(graph: TournamentGraph): SerializedNode[] {
+export function topologicalSort(graph: TournamentGraph): SerializedNode[] {
   const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]))
   const inDegree = new Map<string, number>()
   const adj = new Map<string, Set<string>>()

@@ -1,6 +1,6 @@
 import { useReactFlow } from '@xyflow/react'
 import { useTournamentStore } from '../../store/tournamentStore'
-import type { PhaseType, PhaseOutput } from '../../types/tournament'
+import type { PhaseType, PhaseConfig, PhaseOutput } from '../../types/tournament'
 
 const phaseTypeOptions: { value: PhaseType; label: string }[] = [
   { value: 'round_robin', label: 'Poule (Round Robin)' },
@@ -44,7 +44,7 @@ function PanelContent({
   onDuplicate,
 }: {
   nodeId: string
-  config: { name: string; type: PhaseType; inputCount: number; outputs: PhaseOutput[] }
+  config: PhaseConfig
   updatePhaseConfig: (nodeId: string, updates: Record<string, unknown>) => void
   deleteNode: (nodeId: string) => void
   onDuplicate: (nodeId: string) => void
@@ -106,6 +106,28 @@ function PanelContent({
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Nombre de sets */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Nombre de sets</label>
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+          {([1, 2, 3] as const).map((n) => (
+            <button
+              key={n}
+              onClick={() => updatePhaseConfig(nodeId, { setsCount: n })}
+              className={`flex-1 py-1.5 text-sm font-medium transition-colors duration-150
+                ${(config.setsCount ?? 1) === n
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+                }
+                ${n !== 1 ? 'border-l border-gray-200' : ''}
+              `}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Input count */}

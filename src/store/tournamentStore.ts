@@ -10,7 +10,7 @@ import {
   applyEdgeChanges,
   addEdge,
 } from '@xyflow/react'
-import type { PhaseType, PhaseConfig, PhaseNodeData, PhaseOutput } from '../types/tournament'
+import type { PhaseType, PhaseConfig, PhaseNodeData, PhaseOutput, TournamentStatus, TournamentConfig } from '../types/tournament'
 import { supabase } from '../lib/supabase'
 
 function generateId() {
@@ -47,12 +47,17 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     type,
     inputCount: inputCounts[type],
     outputs: createDefaultOutputs(type),
+    setsCount: 1 as const,
   }
 }
 
 export interface TournamentState {
   tournamentId: string | null
   tournamentName: string
+  tournamentLieu: string | null
+  tournamentImageUrl: string | null
+  tournamentStatus: TournamentStatus
+  tournamentConfig: TournamentConfig
   nodes: Node<PhaseNodeData>[]
   edges: Edge[]
   selectedNodeId: string | null
@@ -69,6 +74,10 @@ export interface TournamentState {
   deleteNode: (nodeId: string) => void
   duplicateNode: (nodeId: string) => void
   setTournamentName: (name: string) => void
+  setTournamentLieu: (lieu: string | null) => void
+  setTournamentImageUrl: (url: string | null) => void
+  setTournamentStatus: (status: TournamentStatus) => void
+  setTournamentConfig: (config: TournamentConfig) => void
 
   loadTournament: (id: string) => Promise<void>
   saveTournament: () => Promise<void>
@@ -78,6 +87,10 @@ export interface TournamentState {
 export const useTournamentStore = create<TournamentState>((set, get) => ({
   tournamentId: null,
   tournamentName: 'Nouveau Tournoi',
+  tournamentLieu: null,
+  tournamentImageUrl: null,
+  tournamentStatus: 'draft',
+  tournamentConfig: { sameDay: false, matchDate: null },
   nodes: [],
   edges: [],
   selectedNodeId: null,
@@ -222,6 +235,10 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
   },
 
   setTournamentName: (name) => set({ tournamentName: name, isDirty: true }),
+  setTournamentLieu: (lieu) => set({ tournamentLieu: lieu, isDirty: true }),
+  setTournamentImageUrl: (url) => set({ tournamentImageUrl: url, isDirty: true }),
+  setTournamentStatus: (status) => set({ tournamentStatus: status }),
+  setTournamentConfig: (config) => set({ tournamentConfig: config, isDirty: true }),
 
   loadTournament: async (id) => {
     const { data, error } = await supabase
@@ -241,6 +258,10 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
     set({
       tournamentId: data.id,
       tournamentName: data.name,
+      tournamentLieu: data.lieu ?? null,
+      tournamentImageUrl: data.image_url ?? null,
+      tournamentStatus: (data.status ?? 'draft') as TournamentStatus,
+      tournamentConfig: (data.tournament_config as TournamentConfig | null) ?? { sameDay: false, matchDate: null },
       nodes,
       edges: graph.edges ?? [],
       isDirty: false,
@@ -249,7 +270,7 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
   },
 
   saveTournament: async () => {
-    const { tournamentId, tournamentName, nodes, edges } = get()
+    const { tournamentId, tournamentName, tournamentLieu, tournamentImageUrl, tournamentConfig, nodes, edges } = get()
     if (!tournamentId) return
 
     set({ isSaving: true })
@@ -271,7 +292,7 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
 
     await supabase
       .from('tt_tournaments')
-      .update({ name: tournamentName, graph_config: graphConfig })
+      .update({ name: tournamentName, graph_config: graphConfig, lieu: tournamentLieu, image_url: tournamentImageUrl, tournament_config: tournamentConfig, status: get().tournamentStatus })
       .eq('id', tournamentId)
 
     set({ isDirty: false, isSaving: false })
@@ -281,6 +302,10 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
     set({
       tournamentId: null,
       tournamentName: 'Nouveau Tournoi',
+      tournamentLieu: null,
+      tournamentImageUrl: null,
+      tournamentStatus: 'draft',
+      tournamentConfig: { sameDay: false, matchDate: null },
       nodes: [],
       edges: [],
       selectedNodeId: null,

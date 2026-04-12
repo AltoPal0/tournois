@@ -11,6 +11,13 @@ export interface PhaseConfig {
   type: PhaseType
   inputCount: number
   outputs: PhaseOutput[]
+  setsCount?: 1 | 2 | 3
+}
+
+export interface TournamentConfig {
+  sameDay: boolean
+  matchDate: string | null
+  imagePosition?: { x: number; y: number }
 }
 
 export interface PhaseNodeData {
@@ -36,12 +43,18 @@ export interface TournamentGraph {
   edges: SerializedEdge[]
 }
 
+export type TournamentStatus = 'draft' | 'active' | 'completed'
+
 export interface Tournament {
   id: string
   name: string
   graph_config: TournamentGraph
   created_at: string
   updated_at: string
+  lieu: string | null
+  image_url: string | null
+  status: TournamentStatus
+  tournament_config: TournamentConfig | null
 }
 
 export interface Joueur {

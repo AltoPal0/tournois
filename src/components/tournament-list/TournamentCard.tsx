@@ -1,54 +1,102 @@
 import { useNavigate } from 'react-router'
-import type { Tournament } from '../../types/tournament'
+import type { Tournament, TournamentStatus } from '../../types/tournament'
 
 interface Props {
   tournament: Tournament
-  onDelete: (id: string) => void
 }
 
-export default function TournamentCard({ tournament, onDelete }: Props) {
+const STATUS_LABELS: Record<TournamentStatus, string> = {
+  draft: 'Brouillon',
+  active: 'En cours',
+  completed: 'Terminé',
+}
+
+const STATUS_CLASSES: Record<TournamentStatus, string> = {
+  draft: 'bg-gray-100 text-gray-500',
+  active: 'bg-blue-100 text-blue-700',
+  completed: 'bg-green-100 text-green-700',
+}
+
+export default function TournamentCard({ tournament }: Props) {
   const navigate = useNavigate()
 
-  const formattedDate = new Date(tournament.updated_at).toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const matchDate = tournament.tournament_config?.matchDate
+  const formattedDate = matchDate
+    ? new Date(matchDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null
 
-  const phaseCount = tournament.graph_config?.nodes?.length ?? 0
+  const status = tournament.status ?? 'draft'
 
   return (
     <div
-      onClick={() => navigate(`/tournament/${tournament.id}`)}
-      className="group relative bg-white rounded-xl border border-gray-200 p-5 cursor-pointer
-        transition-all duration-200 hover:shadow-lg hover:border-gray-300 hover:-translate-y-0.5"
+      onClick={() => navigate(`/tournament/${tournament.id}/matches`)}
+      className="group relative bg-white rounded-2xl border border-gray-100 overflow-hidden cursor-pointer
+        shadow-sm transition-all duration-200 hover:-translate-y-1.5 hover:shadow-xl hover:border-gray-200"
     >
-      <div className="flex items-start justify-between">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-lg font-medium text-gray-900 truncate">
-            {tournament.name}
-          </h3>
-          <p className="mt-1 text-sm text-gray-500">
-            {phaseCount} phase{phaseCount !== 1 ? 's' : ''}
-          </p>
-        </div>
+      {/* Header */}
+      <div className="flex items-start justify-between px-4 pt-4 pb-3">
+        <h3 className="text-base font-semibold text-gray-900 leading-snug pr-2 line-clamp-2">
+          {tournament.name}
+        </h3>
+
+        {/* Gear icon → editor */}
         <button
           onClick={(e) => {
             e.stopPropagation()
-            onDelete(tournament.id)
+            navigate(`/tournament/${tournament.id}`)
           }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity duration-150
-            p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50"
-          title="Supprimer"
+          title="Configurer le tournoi"
+          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150
+            p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+            <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
           </svg>
         </button>
       </div>
-      <p className="mt-3 text-xs text-gray-400">{formattedDate}</p>
+
+      {/* Image */}
+      <div className="w-full h-36 overflow-hidden bg-gray-100">
+        {(() => {
+          const pos = tournament.tournament_config?.imagePosition
+          return (
+            <img
+              src={tournament.image_url ?? ''}
+              alt={tournament.name}
+              referrerPolicy="no-referrer"
+              style={pos ? { objectPosition: `${pos.x}% ${pos.y}%` } : undefined}
+              className="w-full h-full object-cover"
+            />
+          )
+        })()}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-3 space-y-1.5">
+        {/* Lieu */}
+        <div className="flex items-center gap-1.5 text-sm text-gray-500">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+          </svg>
+          {tournament.lieu ? (
+            <span className="truncate">{tournament.lieu}</span>
+          ) : (
+            <span className="text-gray-300 italic">Lieu non renseigné</span>
+          )}
+        </div>
+
+        {/* Date + statut */}
+        <div className="flex items-center justify-between">
+          {formattedDate ? (
+            <span className="text-xs text-gray-400">{formattedDate}</span>
+          ) : (
+            <span className="text-xs text-gray-300 italic">Date non renseignée</span>
+          )}
+          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_CLASSES[status]}`}>
+            {STATUS_LABELS[status]}
+          </span>
+        </div>
+      </div>
     </div>
   )
 }

@@ -3,9 +3,11 @@ import { useParams, Link, useNavigate } from 'react-router'
 import { ReactFlowProvider } from '@xyflow/react'
 import { useTournamentStore } from '../store/tournamentStore'
 import { useMatchStore } from '../store/matchStore'
+import { supabase } from '../lib/supabase'
 import FlowCanvas from '../components/editor/FlowCanvas'
 import Sidebar from '../components/editor/Sidebar'
 import PhaseConfigPanel from '../components/editor/PhaseConfigPanel'
+import TournamentConfigOverlay from '../components/editor/TournamentConfigOverlay'
 
 export default function TournamentEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -15,13 +17,21 @@ export default function TournamentEditorPage() {
   const reset = useTournamentStore((s) => s.reset)
   const tournamentName = useTournamentStore((s) => s.tournamentName)
   const setTournamentName = useTournamentStore((s) => s.setTournamentName)
-  const isDirty = useTournamentStore((s) => s.isDirty)
+  const tournamentLieu = useTournamentStore((s) => s.tournamentLieu)
+  const setTournamentLieu = useTournamentStore((s) => s.setTournamentLieu)
+const isDirty = useTournamentStore((s) => s.isDirty)
   const isSaving = useTournamentStore((s) => s.isSaving)
+  const tournamentStatus = useTournamentStore((s) => s.tournamentStatus)
+  const setTournamentStatus = useTournamentStore((s) => s.setTournamentStatus)
   const nodes = useTournamentStore((s) => s.nodes)
   const edges = useTournamentStore((s) => s.edges)
   const generateMatches = useMatchStore((s) => s.generateMatches)
+  const resetScores = useMatchStore((s) => s.resetScores)
+  const clearMatches = useMatchStore((s) => s.clearMatches)
   const isGenerating = useMatchStore((s) => s.isGenerating)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showConfigOverlay, setShowConfigOverlay] = useState(false)
+  const [showActiveConfirm, setShowActiveConfirm] = useState(false)
 
   useEffect(() => {
     if (id) loadTournament(id)
@@ -29,8 +39,27 @@ export default function TournamentEditorPage() {
   }, [id, loadTournament, reset])
 
   const handleSave = useCallback(() => {
+    if (tournamentStatus === 'active') {
+      setShowActiveConfirm(true)
+    } else {
+      saveTournament()
+    }
+  }, [tournamentStatus, saveTournament])
+
+  const handleSaveActiveConfirmed = useCallback(async () => {
+    if (!id) return
+    setShowActiveConfirm(false)
+    await resetScores(id)
+    setTournamentStatus('draft')
     saveTournament()
-  }, [saveTournament])
+  }, [id, resetScores, setTournamentStatus, saveTournament])
+
+  const handleDeleteTournament = useCallback(async () => {
+    if (!id) return
+    await clearMatches(id)
+    await supabase.from('tt_tournaments').delete().eq('id', id)
+    navigate('/')
+  }, [id, clearMatches, navigate])
 
   const handleGenerate = useCallback(async () => {
     if (!id) return
@@ -81,15 +110,32 @@ export default function TournamentEditorPage() {
             Retour
           </Link>
 
-          <div className="flex-1 flex justify-center">
+          <div className="flex-1 flex items-center justify-center gap-3 min-w-0">
+            {/* Nom */}
             <input
               type="text"
               value={tournamentName}
               onChange={(e) => setTournamentName(e.target.value)}
+              placeholder="Nom du tournoi"
               className="text-center text-sm font-medium text-gray-900 bg-transparent border-none
                 focus:outline-none focus:bg-gray-100 rounded-lg px-3 py-1.5
-                hover:bg-gray-50 transition-colors duration-150 max-w-xs w-full"
+                hover:bg-gray-50 transition-colors duration-150 w-44"
             />
+            <span className="text-gray-200 select-none">|</span>
+            {/* Lieu */}
+            <div className="flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+              </svg>
+              <input
+                type="text"
+                value={tournamentLieu ?? ''}
+                onChange={(e) => setTournamentLieu(e.target.value || null)}
+                placeholder="Lieu"
+                className="text-sm text-gray-700 bg-transparent border-none focus:outline-none
+                  focus:bg-gray-100 rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors duration-150 w-36"
+              />
+            </div>
           </div>
 
           <button
@@ -136,11 +182,46 @@ export default function TournamentEditorPage() {
 
         {/* Main content */}
         <div className="flex-1 flex overflow-hidden">
-          <Sidebar />
+          <Sidebar onOpenConfig={() => setShowConfigOverlay(true)} />
           <FlowCanvas />
           <PhaseConfigPanel />
         </div>
       </div>
+
+      {/* Overlay config tournoi */}
+      <TournamentConfigOverlay
+        isOpen={showConfigOverlay}
+        onClose={() => setShowConfigOverlay(false)}
+        onDeleteTournament={handleDeleteTournament}
+      />
+
+      {/* Modal : sauvegarde d'un tournoi actif */}
+      {showActiveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm mx-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-2">Modifier un tournoi en cours ?</h3>
+            <p className="text-sm text-gray-600 mb-5">
+              Le tournoi est actif. Sauvegarder ces modifications va <strong>effacer tous les scores</strong> et remettre le tournoi en brouillon.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowActiveConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg
+                  hover:bg-gray-200 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSaveActiveConfirmed}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg
+                  hover:bg-red-700 transition-colors"
+              >
+                Effacer les scores et sauver
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de confirmation */}
       {showConfirm && (

@@ -5,21 +5,33 @@ import { useTournamentStore } from '../store/tournamentStore'
 import { supabase } from '../lib/supabase'
 import type { TeamWithJoueurs, TournamentGraph, PhaseType } from '../types/tournament'
 import PhaseSection from '../components/matches/PhaseSection'
+import PhaseNav from '../components/matches/PhaseNav'
+import PlayerAssignmentOverlay from '../components/matches/PlayerAssignmentOverlay'
+import { topologicalSort } from '../lib/matchGeneration'
 
 export default function TournamentMatchesPage() {
   const { id } = useParams<{ id: string }>()
   const matches = useMatchStore((s) => s.matches)
   const isLoading = useMatchStore((s) => s.isLoading)
-  const isAssigning = useMatchStore((s) => s.isAssigning)
+  const isGenerating = useMatchStore((s) => s.isGenerating)
   const loadMatches = useMatchStore((s) => s.loadMatches)
-  const assignRandomTeams = useMatchStore((s) => s.assignRandomTeams)
+  const generateMatches = useMatchStore((s) => s.generateMatches)
+  const activateTournament = useMatchStore((s) => s.activateTournament)
   const resetMatches = useMatchStore((s) => s.reset)
+
   const tournamentName = useTournamentStore((s) => s.tournamentName)
+  const tournamentStatus = useTournamentStore((s) => s.tournamentStatus)
+  const tournamentId = useTournamentStore((s) => s.tournamentId)
+  const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
   const loadTournament = useTournamentStore((s) => s.loadTournament)
   const resetTournament = useTournamentStore((s) => s.reset)
   const nodes = useTournamentStore((s) => s.nodes)
   const edges = useTournamentStore((s) => s.edges)
+
   const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
+  const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
+  const [isPlayerOverlayOpen, setIsPlayerOverlayOpen] = useState(false)
+  const [isActivating, setIsActivating] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -32,31 +44,33 @@ export default function TournamentMatchesPage() {
     }
   }, [id, loadTournament, loadMatches, resetMatches, resetTournament])
 
-  // Charger les équipes avec noms de joueurs
-  useEffect(() => {
-    async function fetchTeams() {
-      const { data } = await supabase
-        .from('tt_teams')
-        .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
-      if (data) {
-        const map = new Map<string, TeamWithJoueurs>()
-        for (const t of data as unknown as TeamWithJoueurs[]) {
-          map.set(t.id, t)
-        }
-        setTeamsMap(map)
+  // Charger toutes les équipes avec noms de joueurs
+  const fetchTeams = useCallback(async () => {
+    const { data } = await supabase
+      .from('tt_teams')
+      .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
+    if (data) {
+      const map = new Map<string, TeamWithJoueurs>()
+      for (const t of data as unknown as TeamWithJoueurs[]) {
+        map.set(t.id, t)
       }
+      setTeamsMap(map)
     }
+  }, [])
+
+  useEffect(() => {
     fetchTeams()
-  }, [matches])
+  }, [fetchTeams])
 
-  const hasUnassignedMatches = useMemo(
-    () => matches.some((m) => !m.equipe1_id && !m.equipe1_label),
-    [matches],
-  )
+  // Rafraîchir matchs + équipes après assignation (overlay fermé ou modifié)
+  const handleAssignmentChanged = useCallback(async () => {
+    if (id) await loadMatches(id)
+    await fetchTeams()
+  }, [id, loadMatches, fetchTeams])
 
-  const handleAssignRandom = useCallback(() => {
-    if (!id) return
-    const graph: TournamentGraph = {
+  // Graphe sérialisé pour PlayerAssignmentOverlay et topologicalSort
+  const graph: TournamentGraph = useMemo(
+    () => ({
       nodes: nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
       edges: edges.map((e) => ({
         id: e.id,
@@ -65,100 +79,257 @@ export default function TournamentMatchesPage() {
         target: e.target,
         targetHandle: e.targetHandle!,
       })),
-    }
-    assignRandomTeams(id, graph)
-  }, [id, nodes, edges, assignRandomTeams])
+    }),
+    [nodes, edges],
+  )
 
-  // Grouper les matchs par phase avec le type
-  const matchesByPhase = useMemo(() => {
-    const groups = new Map<string, { name: string; type: PhaseType; matches: typeof matches }>()
-    for (const match of matches) {
-      if (!groups.has(match.phase_node_id)) {
-        const node = nodes.find((n) => n.id === match.phase_node_id)
-        groups.set(match.phase_node_id, {
-          name: node?.data.config.name ?? match.phase_node_id,
-          type: node?.data.config.type ?? 'round_robin',
-          matches: [],
-        })
-      }
-      groups.get(match.phase_node_id)!.matches.push(match)
+  // Phases triées topologiquement, filtrées à celles qui ont des matchs
+  const sortedPhases = useMemo(() => {
+    if (nodes.length === 0 || matches.length === 0) return []
+    const phaseIdsWithMatches = new Set(matches.map((m) => m.phase_node_id))
+    return topologicalSort(graph)
+      .filter((n) => phaseIdsWithMatches.has(n.id))
+      .map((n) => ({
+        id: n.id,
+        name: n.data.config.name,
+        type: n.data.config.type as PhaseType,
+      }))
+  }, [nodes, graph, matches])
+
+  // Init phase active sur la première phase dès que les données sont prêtes
+  useEffect(() => {
+    if (sortedPhases.length > 0 && !activePhaseId) {
+      setActivePhaseId(sortedPhases[0].id)
     }
-    return Array.from(groups.values())
-  }, [matches, nodes])
+  }, [sortedPhases, activePhaseId])
+
+  // Phases racines (pour calcul assignation)
+  const rootNodeIds = useMemo(
+    () => new Set(nodes.filter((n) => !edges.some((e) => e.target === n.id)).map((n) => n.id)),
+    [nodes, edges],
+  )
+
+  // Tous les matchs des phases racines ont-ils une équipe assignée ?
+  const allPlayersAssigned = useMemo(() => {
+    const rootMatches = matches.filter((m) => rootNodeIds.has(m.phase_node_id))
+    return rootMatches.length > 0 && rootMatches.every((m) => m.equipe1_id && m.equipe2_id)
+  }, [matches, rootNodeIds])
+
+  // Compte des équipes non assignées (slots racines)
+  const unassignedCount = useMemo(() => {
+    const rootNodes = nodes.filter((n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana')
+    const totalSlots = rootNodes.reduce((sum, n) => sum + n.data.config.inputCount, 0)
+    const assigned = new Set<string>()
+    for (const m of matches.filter((m) => rootNodeIds.has(m.phase_node_id))) {
+      if (m.equipe1_id) assigned.add(m.equipe1_id)
+      if (m.equipe2_id) assigned.add(m.equipe2_id)
+    }
+    return Math.max(0, totalSlots - assigned.size)
+  }, [matches, nodes, rootNodeIds])
+
+  const handleActivate = useCallback(async () => {
+    if (!id) return
+    setIsActivating(true)
+    await activateTournament(id)
+    setIsActivating(false)
+  }, [id, activateTournament])
+
+  const handleGenerate = useCallback(async () => {
+    if (!id) return
+    await generateMatches(id, graph)
+  }, [id, graph, generateMatches])
+
+  const activePhase = sortedPhases.find((p) => p.id === activePhaseId) ?? null
+  const activePhaseMatches = activePhaseId ? matches.filter((m) => m.phase_node_id === activePhaseId) : []
+  const isDraft = tournamentStatus === 'draft'
+  const isActive = tournamentStatus === 'active'
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
+
       {/* Top bar */}
-      <div className="h-14 border-b border-gray-200 bg-white flex items-center px-4 gap-4 shrink-0">
+      <div className="h-14 border-b border-gray-200 bg-white flex items-center px-3 sm:px-4 gap-2 sm:gap-4 shrink-0">
         <Link
-          to={`/tournament/${id}`}
-          className="text-sm text-gray-500 hover:text-gray-700 transition-colors duration-150
-            flex items-center gap-1"
+          to="/"
+          className="text-gray-500 hover:text-gray-700 transition-colors duration-150
+            flex items-center gap-1 shrink-0 p-1"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
           </svg>
-          Designer
+          <span className="hidden sm:inline text-sm">Accueil</span>
         </Link>
 
-        <div className="flex-1 text-center">
-          <span className="text-sm font-medium text-gray-900">{tournamentName}</span>
-          <span className="text-xs text-gray-400 ml-2">— Matchs</span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {hasUnassignedMatches && (
-            <button
-              onClick={handleAssignRandom}
-              disabled={isAssigning}
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg
-                transition-all duration-200
-                disabled:opacity-40 disabled:cursor-not-allowed
-                bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98]"
-            >
-              {isAssigning ? (
-                <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" />
-                </svg>
-              )}
-              Assigner aléatoirement
-            </button>
+        <div className="flex-1 flex justify-center items-center gap-2 min-w-0">
+          <span className="text-sm font-semibold text-gray-900 truncate">{tournamentName}</span>
+          {isActive && (
+            <span className="shrink-0 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+              En cours
+            </span>
           )}
-          <span className="text-xs text-gray-400">
-            {matches.length} match{matches.length > 1 ? 's' : ''}
-          </span>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-40">
-            <div className="h-6 w-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-          </div>
-        ) : matches.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-gray-400">
-            <p className="text-sm">Aucun match généré</p>
-            <Link to={`/tournament/${id}`} className="text-sm text-blue-600 hover:underline mt-2">
-              Retour au designer
-            </Link>
-          </div>
-        ) : (
-          <div className="max-w-4xl mx-auto space-y-10">
-            {matchesByPhase.map(({ name, type, matches: phaseMatches }) => (
-              <PhaseSection
-                key={name}
-                name={name}
-                type={type}
-                matches={phaseMatches}
-                teamsMap={teamsMap}
-              />
-            ))}
-          </div>
+        {/* Bouton gestion joueurs (brouillon uniquement) */}
+        {isDraft && matches.length > 0 && (
+          <button
+            onClick={() => setIsPlayerOverlayOpen(true)}
+            className="relative inline-flex items-center justify-center gap-1.5 shrink-0
+              h-9 px-2.5 sm:px-3 rounded-xl text-xs font-medium
+              transition-all duration-200 active:scale-[0.98]
+              bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+            </svg>
+            <span className="hidden sm:inline">Joueurs</span>
+            {unassignedCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 h-4 min-w-[1rem] px-1
+                bg-red-500 text-white text-[10px] font-bold rounded-full
+                flex items-center justify-center leading-none">
+                {unassignedCount}
+              </span>
+            )}
+          </button>
         )}
       </div>
+
+      {/* Bannière activation (tous assignés + draft) */}
+      {isDraft && allPlayersAssigned && (
+        <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-4 py-3
+          flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-amber-400 shrink-0" />
+            <span className="text-sm font-medium text-amber-900">
+              Tous les joueurs sont assignés — le tournoi est prêt !
+            </span>
+          </div>
+          <button
+            onClick={handleActivate}
+            disabled={isActivating}
+            className="self-stretch sm:self-auto inline-flex items-center justify-center gap-2
+              px-4 py-2 rounded-xl text-sm font-semibold
+              bg-amber-400 text-amber-900 hover:bg-amber-300 transition-all duration-200
+              active:scale-[0.98] disabled:opacity-50 shadow-sm"
+          >
+            {isActivating ? (
+              <div className="h-3.5 w-3.5 border-2 border-amber-900/30 border-t-amber-900 rounded-full animate-spin" />
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+              </svg>
+            )}
+            Activer le tournoi
+          </button>
+        </div>
+      )}
+
+      {/* Phase nav */}
+      {sortedPhases.length > 0 && (
+        <div className="shrink-0 bg-white border-b border-gray-200 py-1">
+          <PhaseNav
+            phases={sortedPhases}
+            activePhaseId={activePhaseId}
+            onSelect={setActivePhaseId}
+          />
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+        {isLoading || (matches.length === 0 && !tournamentId) ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="h-6 w-6 border-2 border-gray-200 border-t-blue-600 rounded-full animate-spin" />
+          </div>
+        ) : matches.length === 0 ? (
+          /* État vide — tournoi configuré mais matchs pas encore générés */
+          <div className="flex flex-col items-center justify-center flex-1 px-6 py-20 text-center">
+            {nodes.length === 0 ? (
+              /* Pas de phases configurées */
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <p className="text-gray-700 font-medium mb-1">Tournoi non configuré</p>
+                <p className="text-gray-400 text-sm mb-6">
+                  Définissez les phases du tournoi avant de générer les matchs.
+                </p>
+                <Link
+                  to={`/tournament/${id}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
+                    bg-gray-900 text-white hover:bg-gray-800 transition-all duration-200 active:scale-[0.98]"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                  </svg>
+                  Configurer le tournoi
+                </Link>
+              </>
+            ) : (
+              /* Phases configurées, matchs pas encore générés */
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <p className="text-gray-700 font-medium mb-1">Prêt à générer les matchs</p>
+                <p className="text-gray-400 text-sm mb-2">
+                  {nodes.length} phase{nodes.length > 1 ? 's' : ''} configurée{nodes.length > 1 ? 's' : ''}
+                </p>
+                <p className="text-gray-400 text-xs mb-6 max-w-xs">
+                  Une fois générés, assignez les équipes puis activez le tournoi pour saisir les scores.
+                </p>
+                <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium
+                    bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200
+                    active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-blue-200"
+                >
+                  {isGenerating ? (
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                  {isGenerating ? 'Génération…' : 'Générer les matchs'}
+                </button>
+                <Link
+                  to={`/tournament/${id}`}
+                  className="mt-3 text-sm text-gray-400 hover:text-gray-600 transition-colors duration-150"
+                >
+                  Modifier la configuration →
+                </Link>
+              </>
+            )}
+          </div>
+        ) : activePhase ? (
+          <div className="px-3 sm:px-6 py-4 sm:py-6">
+            <PhaseSection
+              name={activePhase.name}
+              type={activePhase.type}
+              matches={activePhaseMatches}
+              teamsMap={teamsMap}
+              isActive={isActive}
+              sameDay={tournamentConfig.sameDay}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      {/* Overlay full-screen assignation joueurs */}
+      <PlayerAssignmentOverlay
+        isOpen={isPlayerOverlayOpen}
+        onClose={() => setIsPlayerOverlayOpen(false)}
+        tournamentId={id ?? ''}
+        graph={graph}
+        matches={matches}
+        teamsMap={teamsMap}
+        onAssignmentChanged={handleAssignmentChanged}
+      />
     </div>
   )
 }

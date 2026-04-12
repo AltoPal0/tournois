@@ -79,6 +79,17 @@ export function computeStandings(matches: Match[]): StandingRow[] {
     }
   }
 
+  // Ajouter les équipes des matchs non joués (avec 0 stats) pour affichage permanent
+  const knownIds = new Set(rows.keys())
+  for (const m of matches) {
+    for (const tid of [m.equipe1_id, m.equipe2_id]) {
+      if (tid && !knownIds.has(tid)) {
+        knownIds.add(tid)
+        rows.set(tid, { teamId: tid, played: 0, wins: 0, losses: 0, gamesWon: 0, gamesLost: 0, points: 0 })
+      }
+    }
+  }
+
   // Trier : points desc → confrontation directe → diff jeux desc
   const sorted = Array.from(rows.values()).sort((a, b) => {
     // 1. Points

@@ -1,69 +1,274 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import type { Match, PhaseType, TeamWithJoueurs } from '../../types/tournament'
 import { computeStandings } from '../../lib/standings'
 import StandingsTable from './StandingsTable'
-import ScoreInput from './ScoreInput'
+import ScoreInput, { TennisBall, ScoreDisplay } from './ScoreInput'
+import { useMatchStore } from '../../store/matchStore'
 
 interface PhaseSectionProps {
   name: string
   type: PhaseType
   matches: Match[]
   teamsMap: Map<string, TeamWithJoueurs>
+  isActive?: boolean
+  sameDay?: boolean
 }
 
-function TeamLabel({
-  label,
-  teamId,
-  teamsMap,
-}: {
-  label: string | null
-  teamId: string | null
-  teamsMap: Map<string, TeamWithJoueurs>
-}) {
-  if (teamId) {
-    const team = teamsMap.get(teamId)
-    if (team) {
-      return (
-        <span className="text-sm text-gray-900">
-          {team.joueur1.prenom} & {team.joueur2.prenom}
-        </span>
-      )
+// ---------------------------------------------------------------------------
+// Cellule éditable inline (piste / horaire)
+// ---------------------------------------------------------------------------
+
+interface InlineEditCellProps {
+  display: string | null
+  inputValue: string
+  inputType: 'number' | 'datetime-local'
+  onSave: (raw: string) => void
+  placeholder?: string
+}
+
+function InlineEditCell({ display, inputValue, inputType, onSave, placeholder }: InlineEditCellProps) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const committed = useRef(false)
+
+  const commit = () => {
+    if (!committed.current) {
+      committed.current = true
+      onSave(draft)
     }
-    return <span className="text-sm text-gray-900">Équipe assignée</span>
+    setEditing(false)
   }
-  if (label) {
-    return <span className="text-sm text-gray-400 italic">{label}</span>
+
+  if (!editing) {
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          committed.current = false
+          setDraft(inputValue)
+          setEditing(true)
+        }}
+        className="text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 px-1.5 py-0.5
+          rounded transition-colors duration-100 whitespace-nowrap"
+      >
+        {display ?? <span className="text-gray-300">{placeholder ?? '—'}</span>}
+      </button>
+    )
   }
-  return <span className="text-sm text-gray-300 italic">À assigner</span>
+
+  return (
+    <input
+      type={inputType}
+      value={draft}
+      autoFocus
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit()
+        if (e.key === 'Escape') setEditing(false)
+      }}
+      className="text-xs border border-blue-300 rounded px-1.5 py-0.5 w-24
+        focus:outline-none focus:border-blue-500"
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getTeamName(teamId: string | null, teamsMap: Map<string, TeamWithJoueurs>): string | null {
+  if (!teamId) return null
+  const t = teamsMap.get(teamId)
+  if (!t) return null
+  return `${t.joueur1.prenom} & ${t.joueur2.prenom}`
+}
+
+function formatHoraire(horaire: string | null): string | null {
+  if (!horaire) return null
+  // Chaîne d'heure pure "HH:MM" ou "HH:MM:SS" (sans T ni espace)
+  if (!horaire.includes('T') && !horaire.includes(' ') && horaire.includes(':')) {
+    return horaire.slice(0, 5)
+  }
+  try {
+    return new Date(horaire).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return null
+  }
+}
+
+function horaireToInput(horaire: string | null): string {
+  if (!horaire) return ''
+  return horaire.slice(0, 16)
+}
+
+function horaireToTimeInput(horaire: string | null): string {
+  if (!horaire) return ''
+  // Chaîne d'heure pure "HH:MM" ou "HH:MM:SS"
+  if (!horaire.includes('T') && !horaire.includes(' ')) return horaire.slice(0, 5)
+  // Datetime : extraire la partie heure
+  return horaire.slice(11, 16)
 }
 
 function getRoundLabel(type: PhaseType, round: number | null, matches: Match[]): string {
-  if (type === 'round_robin') {
-    return `Tour ${round ?? '?'}`
-  }
-  // Pour l'élimination, extraire le nom du round depuis le nom du premier match
+  if (type === 'round_robin') return `Tour ${round ?? '?'}`
   const first = matches[0]
   if (first) {
     const nom = first.nom
-    // "Quart de finale 1 de Tableau" → "Quart de finale"
-    // "Finale de Tableau" → "Finale"
     const de = nom.lastIndexOf(' de ')
     if (de > 0) {
-      const prefix = nom.slice(0, de)
-      // Enlever le numéro final ("Quart de finale 1" → "Quart de finale")
-      return prefix.replace(/\s+\d+$/, '')
+      return nom.slice(0, de).replace(/\s+\d+$/, '')
     }
   }
   return `Round ${round ?? '?'}`
 }
 
-export default function PhaseSection({ name, type, matches, teamsMap }: PhaseSectionProps) {
+// ---------------------------------------------------------------------------
+// Carte d'un match (mobile-first)
+// ---------------------------------------------------------------------------
+
+function MatchCard({
+  match,
+  teamsMap,
+  isActive,
+  sameDay,
+  onScoreClick,
+}: {
+  match: Match
+  teamsMap: Map<string, TeamWithJoueurs>
+  isActive: boolean
+  sameDay: boolean
+  onScoreClick: (match: Match) => void
+}) {
+  const updateMatchPiste = useMatchStore((s) => s.updateMatchPiste)
+  const updateMatchHoraire = useMatchStore((s) => s.updateMatchHoraire)
+
+  const team1Name = getTeamName(match.equipe1_id, teamsMap)
+  const team2Name = getTeamName(match.equipe2_id, teamsMap)
+  const canScore = isActive && !!(match.equipe1_id && match.equipe2_id)
+  const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
+  const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
+  const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
+
+  const hasPiste = match.piste != null
+  const hasHoraire = !!match.horaire
+  const hasInfo = hasPiste || hasHoraire
+
+  const pisteDisplay = hasPiste ? `Piste ${match.piste}` : null
+  const horaireDisplay = formatHoraire(match.horaire)
+
+  return (
+    <button
+      onClick={canScore ? () => onScoreClick(match) : undefined}
+      className={`w-full text-left bg-white rounded-2xl border transition-all duration-150
+        ${canScore ? 'cursor-pointer active:scale-[0.99] hover:border-gray-200 hover:shadow-sm' : 'cursor-default'}
+        ${match.statut === 'termine' ? 'border-gray-100' : 'border-gray-150'}
+        shadow-[0_1px_3px_rgba(0,0,0,0.06)]
+      `}
+    >
+      <div className="px-4 py-3.5 flex items-center gap-3">
+
+        {/* Noms équipes */}
+        <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+
+          {/* Équipe 1 */}
+          <div className="flex items-center gap-1.5">
+            <span className={`text-sm leading-tight truncate font-medium
+              ${team1Name ? 'text-gray-800' : 'text-gray-300 italic'}`}>
+              {team1Name ?? (match.equipe1_label ?? 'À assigner')}
+            </span>
+            {team1Won && <TennisBall className="w-3.5 h-3.5 shrink-0" />}
+          </div>
+
+          {/* Équipe 2 */}
+          <div className="flex items-center gap-1.5">
+            <span className={`text-sm leading-tight truncate font-medium
+              ${team2Name ? 'text-gray-800' : 'text-gray-300 italic'}`}>
+              {team2Name ?? (match.equipe2_label ?? 'À assigner')}
+            </span>
+            {team2Won && <TennisBall className="w-3.5 h-3.5 shrink-0" />}
+          </div>
+
+          {/* Piste / Horaire — toujours affichés quand dispo */}
+          {(hasInfo || isActive) && (
+            <div className="flex items-center gap-2.5 mt-0.5" onClick={(e) => e.stopPropagation()}>
+              {isActive ? (
+                <>
+                  <InlineEditCell
+                    display={pisteDisplay}
+                    inputValue={match.piste != null ? String(match.piste) : ''}
+                    inputType="number"
+                    placeholder="Piste"
+                    onSave={(raw) => updateMatchPiste(match.id, raw === '' ? null : (parseInt(raw, 10) || null))}
+                  />
+                  <InlineEditCell
+                    display={horaireDisplay}
+                    inputValue={sameDay ? horaireToTimeInput(match.horaire) : horaireToInput(match.horaire)}
+                    inputType={sameDay ? 'time' : 'datetime-local'}
+                    placeholder="Horaire"
+                    onSave={(raw) => {
+                      if (!raw) { updateMatchHoraire(match.id, null); return }
+                      updateMatchHoraire(match.id, sameDay ? raw : raw + ':00')
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  {pisteDisplay && (
+                    <span className="text-xs text-gray-400">{pisteDisplay}</span>
+                  )}
+                  {horaireDisplay && (
+                    <span className="text-xs text-gray-400">{horaireDisplay}</span>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Zone score / statut */}
+        <div className="shrink-0 flex flex-col items-end justify-center min-w-[3rem]">
+          {hasScore ? (
+            <ScoreDisplay v1={match.score_equipe1!} v2={match.score_equipe2!} />
+          ) : canScore ? (
+            /* Pas de score : montrer piste/horaire OU badge "Saisir" */
+            hasInfo ? (
+              <div className="flex flex-col items-end gap-0.5">
+                {pisteDisplay && (
+                  <span className="text-xs font-medium text-gray-500">{pisteDisplay}</span>
+                )}
+                {horaireDisplay && (
+                  <span className="text-xs text-gray-500">{horaireDisplay}</span>
+                )}
+              </div>
+            ) : (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full
+                bg-amber-50 text-amber-600 border border-amber-200 whitespace-nowrap">
+                Saisir
+              </span>
+            )
+          ) : (
+            <span className="text-xs text-gray-300">—</span>
+          )}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Composant principal
+// ---------------------------------------------------------------------------
+
+export default function PhaseSection({ name, type, matches, teamsMap, isActive = false, sameDay = false }: PhaseSectionProps) {
+  const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
+
   const standings = useMemo(
     () => (type === 'round_robin' ? computeStandings(matches) : []),
     [type, matches],
   )
 
-  // Grouper les matchs par round
   const matchesByRound = useMemo(() => {
     const groups = new Map<number, Match[]>()
     for (const m of matches) {
@@ -80,66 +285,50 @@ export default function PhaseSection({ name, type, matches, teamsMap }: PhaseSec
       }))
   }, [matches, type])
 
+  const scoringTeam1Name = scoringMatch ? getTeamName(scoringMatch.equipe1_id, teamsMap) : null
+  const scoringTeam2Name = scoringMatch ? getTeamName(scoringMatch.equipe2_id, teamsMap) : null
+
   return (
     <section>
-      <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">
-        {name}
-        <span className="ml-2 text-gray-400 font-normal normal-case">
-          ({matches.length} match{matches.length > 1 ? 's' : ''})
-        </span>
-      </h2>
-
-      {/* Classement pour les poules */}
-      {type === 'round_robin' && standings.length > 0 && (
-        <StandingsTable standings={standings} teamsMap={teamsMap} />
+      {/* Tableau des scores — toujours visible en round_robin */}
+      {type === 'round_robin' && (
+        <div className="mb-5">
+          <StandingsTable standings={standings} teamsMap={teamsMap} />
+        </div>
       )}
 
-      {/* Matchs groupés par tour/round */}
+      {/* Rounds / matchs */}
       {matchesByRound.map(({ round, label, matches: roundMatches }) => (
-        <div key={round} className="mb-4">
-          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 px-1">
+        <div key={round} className="mb-5">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5 px-0.5">
             {label}
           </h3>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-                  <th className="text-left px-4 py-2">Match</th>
-                  <th className="text-right px-4 py-2">Équipe 1</th>
-                  <th className="text-center px-2 py-2 w-32">Score</th>
-                  <th className="text-left px-4 py-2">Équipe 2</th>
-                  <th className="text-left px-3 py-2 w-16">Piste</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roundMatches.map((match) => (
-                  <tr
-                    key={match.id}
-                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50
-                      transition-colors duration-100"
-                  >
-                    <td className="px-4 py-2.5 text-sm text-gray-500">
-                      {match.nom}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <TeamLabel label={match.equipe1_label} teamId={match.equipe1_id} teamsMap={teamsMap} />
-                    </td>
-                    <td className="px-2 py-2.5 text-center">
-                      <ScoreInput match={match} />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <TeamLabel label={match.equipe2_label} teamId={match.equipe2_id} teamsMap={teamsMap} />
-                    </td>
-                    <td className="px-3 py-2.5 text-sm text-gray-400">
-                      {match.piste ?? '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {roundMatches.map((match) => (
+              <MatchCard
+                key={match.id}
+                match={match}
+                teamsMap={teamsMap}
+                isActive={isActive}
+                sameDay={sameDay}
+                onScoreClick={setScoringMatch}
+              />
+            ))}
           </div>
         </div>
       ))}
+
+      {/* Overlay saisie score */}
+      {scoringMatch && (
+        <ScoreInput
+          key={scoringMatch.id}
+          match={scoringMatch}
+          team1Name={scoringTeam1Name}
+          team2Name={scoringTeam2Name}
+          isOpen={true}
+          onClose={() => setScoringMatch(null)}
+        />
+      )}
     </section>
   )
 }
