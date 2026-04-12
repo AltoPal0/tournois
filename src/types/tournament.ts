@@ -1,4 +1,4 @@
-export type PhaseType = 'round_robin' | 'elimination' | 'super_americana'
+export type PhaseType = 'round_robin' | 'elimination' | 'super_americana' | 'tournante_libre'
 
 export interface PhaseOutput {
   id: string
@@ -12,6 +12,7 @@ export interface PhaseConfig {
   inputCount: number
   outputs: PhaseOutput[]
   setsCount?: 1 | 2 | 3
+  roundCount?: number
 }
 
 export interface TournamentConfig {

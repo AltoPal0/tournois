@@ -337,6 +337,45 @@ function getInternalProvenance(
 }
 
 // ---------------------------------------------------------------------------
+// Tournante libre : format suisse, rounds × N/2 matchs
+// ---------------------------------------------------------------------------
+
+function generateTournantreLibreMatches(
+  node: SerializedNode,
+  tournamentId: string,
+): NewMatch[] {
+  const { config } = node.data
+  const rounds = config.roundCount ?? 4
+  const matchesPerRound = Math.floor(config.inputCount / 2)
+  const matches: NewMatch[] = []
+  let ordre = 1
+
+  for (let round = 1; round <= rounds; round++) {
+    for (let i = 1; i <= matchesPerRound; i++) {
+      matches.push({
+        tournament_id: tournamentId,
+        phase_node_id: node.id,
+        nom: `Round ${round} Match ${i} de ${config.name}`,
+        statut: 'a_jouer',
+        equipe1_id: null,
+        equipe2_id: null,
+        equipe1_label: null,
+        equipe2_label: null,
+        horaire: null,
+        piste: null,
+        ordre,
+        round,
+        score_equipe1: null,
+        score_equipe2: null,
+      })
+      ordre++
+    }
+  }
+
+  return matches
+}
+
+// ---------------------------------------------------------------------------
 // Calcul des slots d'entrée par match (pour l'assignation d'équipes)
 // ---------------------------------------------------------------------------
 
@@ -346,7 +385,7 @@ function getInternalProvenance(
  * sont retournés (round robin: tous, élimination: round 1 uniquement).
  */
 export function computeInputSlotPairs(
-  phaseType: 'round_robin' | 'elimination',
+  phaseType: 'round_robin' | 'elimination' | 'tournante_libre',
   inputCount: number,
 ): { ordre: number; slot1: number; slot2: number }[] {
   const pairs: { ordre: number; slot1: number; slot2: number }[] = []
@@ -359,6 +398,11 @@ export function computeInputSlotPairs(
         pairs.push({ ordre, slot1, slot2 })
         ordre++
       }
+    }
+  } else if (phaseType === 'tournante_libre') {
+    // Round 1 uniquement : slot 1 vs 2, 3 vs 4, ...
+    for (let i = 0; i < inputCount / 2; i++) {
+      pairs.push({ ordre: i + 1, slot1: 2 * i + 1, slot2: 2 * i + 2 })
     }
   } else {
     // Élimination : seul le round 1 a des slots d'entrée directs
@@ -395,10 +439,13 @@ export function generateAllMatches(
     const provenances = provenanceMap.get(node.id) ?? []
     const isRoot = !graph.edges.some((e) => e.target === node.id)
 
+    const { type } = node.data.config
     const matches =
-      node.data.config.type === 'round_robin'
+      type === 'round_robin'
         ? generateRoundRobinMatches(node, provenances, isRoot, tournamentId)
-        : generateEliminationMatches(node, provenances, isRoot, tournamentId)
+        : type === 'tournante_libre'
+          ? generateTournantreLibreMatches(node, tournamentId)
+          : generateEliminationMatches(node, provenances, isRoot, tournamentId)
 
     allMatches.push(...matches)
   }

@@ -21,6 +21,12 @@ const typeStyles = {
     selectedRing: 'ring-emerald-500',
     label: 'Super Americana',
   },
+  tournante_libre: {
+    badge: 'bg-violet-100 text-violet-700',
+    border: 'border-violet-200',
+    selectedRing: 'ring-violet-500',
+    label: 'Tournante',
+  },
 }
 
 function PhaseNode({ id, data, selected }: NodeProps<Node<PhaseNodeData>>) {

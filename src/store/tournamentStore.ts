@@ -22,6 +22,7 @@ function createDefaultOutputs(type: PhaseType): PhaseOutput[] {
     round_robin: { count: 2, labels: ['1er', '2ème'] },
     elimination: { count: 3, labels: ['1er', '2ème', '3ème'] },
     super_americana: { count: 3, labels: ['1er', '2ème', '3ème'] },
+    tournante_libre: { count: 2, labels: ['1er', '2ème'] },
   }
   const { count, labels } = configs[type]
   return Array.from({ length: count }, (_, i) => ({
@@ -36,11 +37,13 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     round_robin: 'Poule',
     elimination: 'Tableau',
     super_americana: 'Super Americana',
+    tournante_libre: 'Tournante libre',
   }
   const inputCounts: Record<PhaseType, number> = {
     round_robin: 4,
     elimination: 8,
     super_americana: 6,
+    tournante_libre: 10,
   }
   return {
     name: names[type],
@@ -48,6 +51,7 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     inputCount: inputCounts[type],
     outputs: createDefaultOutputs(type),
     setsCount: 1 as const,
+    roundCount: type === 'tournante_libre' ? 4 : undefined,
   }
 }
 

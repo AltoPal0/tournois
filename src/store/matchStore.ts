@@ -3,6 +3,7 @@ import type { Match, TournamentGraph } from '../types/tournament'
 import { supabase } from '../lib/supabase'
 import { generateAllMatches, computeInputSlotPairs } from '../lib/matchGeneration'
 import { computeAdvancements } from '../lib/advancement'
+import { computeNextRoundPairings } from '../lib/swissPairing'
 import { useTournamentStore } from './tournamentStore'
 
 interface MatchState {
@@ -11,6 +12,7 @@ interface MatchState {
   isLoading: boolean
   isAssigning: boolean
 
+  subscribeToMatches: (tournamentId: string) => () => void
   loadMatches: (tournamentId: string) => Promise<void>
   generateMatches: (tournamentId: string, graph: TournamentGraph) => Promise<void>
   assignRandomTeams: (tournamentId: string, graph: TournamentGraph) => Promise<void>
@@ -41,6 +43,38 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   isGenerating: false,
   isLoading: false,
   isAssigning: false,
+
+  subscribeToMatches: (tournamentId) => {
+    const channel = supabase
+      .channel(`matches:${tournamentId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tt_matches', filter: `tournament_id=eq.${tournamentId}` },
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as Match
+            set((state) => ({
+              matches: state.matches.map((m) => (m.id === updated.id ? updated : m)),
+            }))
+          } else if (payload.eventType === 'INSERT') {
+            const inserted = payload.new as Match
+            set((state) => ({
+              matches: [...state.matches, inserted],
+            }))
+          } else if (payload.eventType === 'DELETE') {
+            const deleted = payload.old as { id: string }
+            set((state) => ({
+              matches: state.matches.filter((m) => m.id !== deleted.id),
+            }))
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  },
 
   loadMatches: async (tournamentId) => {
     set({ isLoading: true })
@@ -204,6 +238,31 @@ export const useMatchStore = create<MatchState>((set, get) => ({
           return patched
         }),
       }))
+    }
+
+    // Appariement suisse pour tournante_libre
+    const updatedMatch = get().matches.find((m) => m.id === matchId)
+    if (updatedMatch) {
+      const { nodes } = useTournamentStore.getState()
+      const phaseNode = nodes.find((n) => n.id === updatedMatch.phase_node_id)
+      if (phaseNode?.data.config.type === 'tournante_libre') {
+        const phaseMatches = get().matches.filter((m) => m.phase_node_id === updatedMatch.phase_node_id)
+        const pairUpdates = computeNextRoundPairings(matchId, phaseMatches)
+        if (pairUpdates.length > 0) {
+          for (const u of pairUpdates) {
+            await supabase
+              .from('tt_matches')
+              .update({ equipe1_id: u.equipe1_id, equipe2_id: u.equipe2_id })
+              .eq('id', u.matchId)
+          }
+          set((state) => ({
+            matches: state.matches.map((m) => {
+              const u = pairUpdates.find((p) => p.matchId === m.id)
+              return u ? { ...m, equipe1_id: u.equipe1_id, equipe2_id: u.equipe2_id } : m
+            }),
+          }))
+        }
+      }
     }
   },
 

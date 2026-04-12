@@ -113,6 +113,7 @@ function horaireToTimeInput(horaire: string | null): string {
 
 function getRoundLabel(type: PhaseType, round: number | null, matches: Match[]): string {
   if (type === 'round_robin') return `Tour ${round ?? '?'}`
+  if (type === 'tournante_libre') return `Round ${round ?? '?'}`
   const first = matches[0]
   if (first) {
     const nom = first.nom
@@ -151,11 +152,7 @@ function MatchCard({
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
 
-  const hasPiste = match.piste != null
-  const hasHoraire = !!match.horaire
-  const hasInfo = hasPiste || hasHoraire
-
-  const pisteDisplay = hasPiste ? `Piste ${match.piste}` : null
+  const pisteDisplay = match.piste != null ? `Piste ${match.piste}` : null
   const horaireDisplay = formatHoraire(match.horaire)
 
   return (
@@ -171,8 +168,6 @@ function MatchCard({
 
         {/* Noms équipes */}
         <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-
-          {/* Équipe 1 */}
           <div className="flex items-center gap-1.5">
             <span className={`text-sm leading-tight truncate font-medium
               ${team1Name ? 'text-gray-800' : 'text-gray-300 italic'}`}>
@@ -180,8 +175,6 @@ function MatchCard({
             </span>
             {team1Won && <TennisBall className="w-3.5 h-3.5 shrink-0" />}
           </div>
-
-          {/* Équipe 2 */}
           <div className="flex items-center gap-1.5">
             <span className={`text-sm leading-tight truncate font-medium
               ${team2Name ? 'text-gray-800' : 'text-gray-300 italic'}`}>
@@ -189,67 +182,39 @@ function MatchCard({
             </span>
             {team2Won && <TennisBall className="w-3.5 h-3.5 shrink-0" />}
           </div>
-
-          {/* Piste / Horaire — toujours affichés quand dispo */}
-          {(hasInfo || isActive) && (
-            <div className="flex items-center gap-2.5 mt-0.5" onClick={(e) => e.stopPropagation()}>
-              {isActive ? (
-                <>
-                  <InlineEditCell
-                    display={pisteDisplay}
-                    inputValue={match.piste != null ? String(match.piste) : ''}
-                    inputType="number"
-                    placeholder="Piste"
-                    onSave={(raw) => updateMatchPiste(match.id, raw === '' ? null : (parseInt(raw, 10) || null))}
-                  />
-                  <InlineEditCell
-                    display={horaireDisplay}
-                    inputValue={sameDay ? horaireToTimeInput(match.horaire) : horaireToInput(match.horaire)}
-                    inputType={sameDay ? 'time' : 'datetime-local'}
-                    placeholder="Horaire"
-                    onSave={(raw) => {
-                      if (!raw) { updateMatchHoraire(match.id, null); return }
-                      updateMatchHoraire(match.id, sameDay ? raw : raw + ':00')
-                    }}
-                  />
-                </>
-              ) : (
-                <>
-                  {pisteDisplay && (
-                    <span className="text-xs text-gray-400">{pisteDisplay}</span>
-                  )}
-                  {horaireDisplay && (
-                    <span className="text-xs text-gray-400">{horaireDisplay}</span>
-                  )}
-                </>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* Zone score / statut */}
-        <div className="shrink-0 flex flex-col items-end justify-center min-w-[3rem]">
+        {/* Zone droite : score si joué, sinon piste/horaire */}
+        <div className="shrink-0 flex flex-col items-end justify-center gap-0.5 min-w-[4rem]">
           {hasScore ? (
             <ScoreDisplay v1={match.score_equipe1!} v2={match.score_equipe2!} />
-          ) : canScore ? (
-            /* Pas de score : montrer piste/horaire OU badge "Saisir" */
-            hasInfo ? (
-              <div className="flex flex-col items-end gap-0.5">
-                {pisteDisplay && (
-                  <span className="text-xs font-medium text-gray-500">{pisteDisplay}</span>
-                )}
-                {horaireDisplay && (
-                  <span className="text-xs text-gray-500">{horaireDisplay}</span>
-                )}
-              </div>
-            ) : (
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full
-                bg-amber-50 text-amber-600 border border-amber-200 whitespace-nowrap">
-                Saisir
-              </span>
-            )
+          ) : isActive ? (
+            /* Actif : cellules inline éditables, toujours affichées */
+            <div className="flex flex-col items-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+              <InlineEditCell
+                display={pisteDisplay}
+                inputValue={match.piste != null ? String(match.piste) : ''}
+                inputType="number"
+                placeholder="Piste"
+                onSave={(raw) => updateMatchPiste(match.id, raw === '' ? null : (parseInt(raw, 10) || null))}
+              />
+              <InlineEditCell
+                display={horaireDisplay}
+                inputValue={sameDay ? horaireToTimeInput(match.horaire) : horaireToInput(match.horaire)}
+                inputType={sameDay ? 'time' : 'datetime-local'}
+                placeholder="Horaire"
+                onSave={(raw) => {
+                  if (!raw) { updateMatchHoraire(match.id, null); return }
+                  updateMatchHoraire(match.id, sameDay ? raw : raw + ':00')
+                }}
+              />
+            </div>
           ) : (
-            <span className="text-xs text-gray-300">—</span>
+            /* Brouillon : lecture seule */
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-xs text-gray-400 whitespace-nowrap">{pisteDisplay ?? ''}</span>
+              <span className="text-xs text-gray-400 whitespace-nowrap">{horaireDisplay ?? ''}</span>
+            </div>
           )}
         </div>
       </div>
@@ -265,7 +230,7 @@ export default function PhaseSection({ type, matches, teamsMap, isActive = false
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
 
   const standings = useMemo(
-    () => (type === 'round_robin' ? computeStandings(matches) : []),
+    () => (type === 'round_robin' || type === 'tournante_libre' ? computeStandings(matches) : []),
     [type, matches],
   )
 
@@ -290,8 +255,8 @@ export default function PhaseSection({ type, matches, teamsMap, isActive = false
 
   return (
     <section>
-      {/* Tableau des scores — toujours visible en round_robin */}
-      {type === 'round_robin' && (
+      {/* Tableau des scores — round_robin et tournante_libre */}
+      {(type === 'round_robin' || type === 'tournante_libre') && (
         <div className="mb-5">
           <StandingsTable standings={standings} teamsMap={teamsMap} />
         </div>

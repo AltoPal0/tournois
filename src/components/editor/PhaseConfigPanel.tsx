@@ -6,6 +6,7 @@ const phaseTypeOptions: { value: PhaseType; label: string }[] = [
   { value: 'round_robin', label: 'Poule (Round Robin)' },
   { value: 'elimination', label: 'Tableau (Élimination)' },
   { value: 'super_americana', label: 'Super Americana' },
+  { value: 'tournante_libre', label: 'Tournante libre (Suisse)' },
 ]
 
 export default function PhaseConfigPanel() {
@@ -107,6 +108,27 @@ function PanelContent({
           ))}
         </select>
       </div>
+
+      {/* Nombre de rounds (tournante_libre uniquement) */}
+      {config.type === 'tournante_libre' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Nombre de rounds</label>
+          <input
+            type="number"
+            min={2}
+            max={8}
+            value={config.roundCount ?? 4}
+            onChange={(e) =>
+              updatePhaseConfig(nodeId, {
+                roundCount: Math.max(2, Math.min(8, parseInt(e.target.value) || 4)),
+              })
+            }
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+              focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent
+              transition-shadow duration-150"
+          />
+        </div>
+      )}
 
       {/* Nombre de sets */}
       <div>

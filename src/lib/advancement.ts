@@ -31,7 +31,7 @@ export function computeAdvancements(
   const config = node.data.config
   const phaseMatches = allMatches.filter((m) => m.phase_node_id === phaseNodeId)
 
-  if (config.type === 'round_robin') {
+  if (config.type === 'round_robin' || config.type === 'tournante_libre') {
     advanceFromRoundRobin(phaseMatches, node, allMatches, updates)
   } else if (config.type === 'elimination') {
     advanceFromElimination(completedMatch, phaseMatches, node, allMatches, updates)

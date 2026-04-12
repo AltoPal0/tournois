@@ -117,9 +117,11 @@ export default function ScoreInput({ match, team1Name, team2Name, isOpen, onClos
 
   const team1Leads = s1 > s2
   const team2Leads = s2 > s1
+  const isTie = s1 === s2
   const hasExistingScore = match.score_equipe1 != null && match.score_equipe2 != null
 
   const handleConfirm = () => {
+    if (isTie) return
     updateMatchScore(match.id, s1, s2)
     onClose()
   }
@@ -184,14 +186,25 @@ export default function ScoreInput({ match, team1Name, team2Name, isOpen, onClos
         <div className="px-4 pb-8 pt-2 space-y-2">
           <button
             onClick={handleConfirm}
-            className="w-full h-14 rounded-2xl bg-blue-600 text-white text-base font-semibold
+            disabled={isTie}
+            className={`w-full h-14 rounded-2xl text-base font-semibold
               flex items-center justify-center gap-2
-              hover:bg-blue-700 active:scale-[0.98] transition-all duration-150 shadow-md shadow-blue-200"
+              transition-all duration-150
+              ${isTie
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98] shadow-md shadow-blue-200'
+              }`}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Confirmer le score
+            {isTie ? (
+              'Égalité non autorisée'
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Confirmer le score
+              </>
+            )}
           </button>
           {hasExistingScore && (
             <button

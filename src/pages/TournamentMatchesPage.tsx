@@ -15,6 +15,7 @@ export default function TournamentMatchesPage() {
   const isLoading = useMatchStore((s) => s.isLoading)
   const isGenerating = useMatchStore((s) => s.isGenerating)
   const loadMatches = useMatchStore((s) => s.loadMatches)
+  const subscribeToMatches = useMatchStore((s) => s.subscribeToMatches)
   const generateMatches = useMatchStore((s) => s.generateMatches)
   const activateTournament = useMatchStore((s) => s.activateTournament)
   const resetMatches = useMatchStore((s) => s.reset)
@@ -34,15 +35,16 @@ export default function TournamentMatchesPage() {
   const [isActivating, setIsActivating] = useState(false)
 
   useEffect(() => {
-    if (id) {
-      loadTournament(id)
-      loadMatches(id)
-    }
+    if (!id) return
+    loadTournament(id)
+    loadMatches(id)
+    const unsubscribe = subscribeToMatches(id)
     return () => {
+      unsubscribe()
       resetMatches()
       resetTournament()
     }
-  }, [id, loadTournament, loadMatches, resetMatches, resetTournament])
+  }, [id, loadTournament, loadMatches, subscribeToMatches, resetMatches, resetTournament])
 
   // Charger toutes les équipes avec noms de joueurs
   const fetchTeams = useCallback(async () => {
@@ -109,22 +111,38 @@ export default function TournamentMatchesPage() {
     [nodes, edges],
   )
 
-  // Tous les matchs des phases racines ont-ils une équipe assignée ?
-  const allPlayersAssigned = useMemo(() => {
-    const rootMatches = matches.filter((m) => rootNodeIds.has(m.phase_node_id))
-    return rootMatches.length > 0 && rootMatches.every((m) => m.equipe1_id && m.equipe2_id)
-  }, [matches, rootNodeIds])
+  // Par type de phase, seuls certains matchs requièrent une assignation manuelle :
+  // - round_robin : tous les matchs (slots directs sur chaque tour)
+  // - elimination  : round 1 uniquement (les rounds suivants sont remplis par avancement)
+  // - tournante_libre : round 1 uniquement (les rounds suivants sont calculés en suisse)
+  function requiredMatchesForType(phaseType: PhaseType, phaseMatches: typeof matches) {
+    if (phaseType === 'round_robin') return phaseMatches
+    return phaseMatches.filter((m) => m.round === 1)
+  }
 
-  // Compte des équipes non assignées (slots racines)
+  // Tous les matchs "requis" des phases racines ont-ils leurs deux équipes ?
+  const allPlayersAssigned = useMemo(() => {
+    const rootNodes = nodes.filter((n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana')
+    if (rootNodes.length === 0) return false
+    return rootNodes.every((node) => {
+      const phaseMatches = matches.filter((m) => m.phase_node_id === node.id)
+      const required = requiredMatchesForType(node.data.config.type, phaseMatches)
+      return required.length > 0 && required.every((m) => m.equipe1_id && m.equipe2_id)
+    })
+  }, [matches, nodes, rootNodeIds])
+
+  // Compte des équipes non assignées (slots requis des phases racines)
   const unassignedCount = useMemo(() => {
     const rootNodes = nodes.filter((n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana')
-    const totalSlots = rootNodes.reduce((sum, n) => sum + n.data.config.inputCount, 0)
-    const assigned = new Set<string>()
-    for (const m of matches.filter((m) => rootNodeIds.has(m.phase_node_id))) {
-      if (m.equipe1_id) assigned.add(m.equipe1_id)
-      if (m.equipe2_id) assigned.add(m.equipe2_id)
+    let total = 0
+    let assigned = 0
+    for (const node of rootNodes) {
+      const phaseMatches = matches.filter((m) => m.phase_node_id === node.id)
+      const required = requiredMatchesForType(node.data.config.type, phaseMatches)
+      total += required.length * 2
+      assigned += required.filter((m) => m.equipe1_id).length + required.filter((m) => m.equipe2_id).length
     }
-    return Math.max(0, totalSlots - assigned.size)
+    return Math.max(0, total - assigned)
   }, [matches, nodes, rootNodeIds])
 
   const handleActivate = useCallback(async () => {
@@ -169,59 +187,51 @@ export default function TournamentMatchesPage() {
           )}
         </div>
 
-        {/* Bouton gestion joueurs (brouillon uniquement) */}
+        {/* Boutons brouillon (gestion joueurs + activer) */}
         {isDraft && matches.length > 0 && (
-          <button
-            onClick={() => setIsPlayerOverlayOpen(true)}
-            className="relative inline-flex items-center justify-center gap-1.5 shrink-0
-              h-9 px-2.5 sm:px-3 rounded-xl text-xs font-medium
-              transition-all duration-200 active:scale-[0.98]
-              bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-            </svg>
-            <span className="hidden sm:inline">Joueurs</span>
-            {unassignedCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 h-4 min-w-[1rem] px-1
-                bg-red-500 text-white text-[10px] font-bold rounded-full
-                flex items-center justify-center leading-none">
-                {unassignedCount}
-              </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsPlayerOverlayOpen(true)}
+              className="relative inline-flex items-center justify-center gap-1.5
+                h-9 px-2.5 sm:px-3 rounded-xl text-xs font-medium
+                transition-all duration-200 active:scale-[0.98]
+                bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+              </svg>
+              <span className="hidden sm:inline">Joueurs</span>
+              {unassignedCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 h-4 min-w-[1rem] px-1
+                  bg-red-500 text-white text-[10px] font-bold rounded-full
+                  flex items-center justify-center leading-none">
+                  {unassignedCount}
+                </span>
+              )}
+            </button>
+
+            {allPlayersAssigned && (
+              <button
+                onClick={handleActivate}
+                disabled={isActivating}
+                className="inline-flex items-center justify-center gap-1.5
+                  h-9 px-2.5 sm:px-3 rounded-xl text-xs font-semibold
+                  transition-all duration-200 active:scale-[0.98] disabled:opacity-50
+                  bg-amber-400 text-amber-900 hover:bg-amber-300 shadow-sm"
+              >
+                {isActivating ? (
+                  <div className="h-3.5 w-3.5 border-2 border-amber-900/30 border-t-amber-900 rounded-full animate-spin" />
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                  </svg>
+                )}
+                <span className="hidden sm:inline">Activer</span>
+              </button>
             )}
-          </button>
+          </div>
         )}
       </div>
-
-      {/* Bannière activation (tous assignés + draft) */}
-      {isDraft && allPlayersAssigned && (
-        <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-4 py-3
-          flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-amber-400 shrink-0" />
-            <span className="text-sm font-medium text-amber-900">
-              Tous les joueurs sont assignés — le tournoi est prêt !
-            </span>
-          </div>
-          <button
-            onClick={handleActivate}
-            disabled={isActivating}
-            className="self-stretch sm:self-auto inline-flex items-center justify-center gap-2
-              px-4 py-2 rounded-xl text-sm font-semibold
-              bg-amber-400 text-amber-900 hover:bg-amber-300 transition-all duration-200
-              active:scale-[0.98] disabled:opacity-50 shadow-sm"
-          >
-            {isActivating ? (
-              <div className="h-3.5 w-3.5 border-2 border-amber-900/30 border-t-amber-900 rounded-full animate-spin" />
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-              </svg>
-            )}
-            Activer le tournoi
-          </button>
-        </div>
-      )}
 
       {/* Phase nav */}
       {sortedPhases.length > 0 && (

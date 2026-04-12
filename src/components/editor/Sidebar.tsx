@@ -20,6 +20,12 @@ const phaseTypes: { type: PhaseType; label: string; description: string; color: 
     color: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     disabled: true,
   },
+  {
+    type: 'tournante_libre',
+    label: 'Tournante libre',
+    description: 'Suisse simplifié',
+    color: 'border-violet-200 bg-violet-50 text-violet-700',
+  },
 ]
 
 export default function Sidebar({ onOpenConfig }: { onOpenConfig?: () => void }) {
