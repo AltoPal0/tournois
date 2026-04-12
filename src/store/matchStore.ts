@@ -103,7 +103,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const { matches } = get()
 
     // Construire toutes les mises à jour pour toutes les phases racine
-    const allUpdates: Promise<unknown>[] = []
+    const allUpdates: PromiseLike<unknown>[] = []
 
     for (const node of rootNodes) {
       const { type, inputCount } = node.data.config

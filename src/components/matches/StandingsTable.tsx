@@ -41,7 +41,6 @@ export default function StandingsTable({ standings, teamsMap }: StandingsTablePr
           {standings.map((row, i) => {
             const hasPlayed = row.played > 0
             const isLeader = i === 0 && hasPlayed
-            const diff = row.gamesWon - row.gamesLost
 
             return (
               <div

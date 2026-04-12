@@ -6,7 +6,6 @@ import {
   MiniMap,
   BackgroundVariant,
   useReactFlow,
-  ReactFlowProvider,
   type IsValidConnection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'

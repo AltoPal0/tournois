@@ -21,7 +21,7 @@ interface PhaseSectionProps {
 interface InlineEditCellProps {
   display: string | null
   inputValue: string
-  inputType: 'number' | 'datetime-local'
+  inputType: 'number' | 'datetime-local' | 'time'
   onSave: (raw: string) => void
   placeholder?: string
 }
@@ -261,7 +261,7 @@ function MatchCard({
 // Composant principal
 // ---------------------------------------------------------------------------
 
-export default function PhaseSection({ name, type, matches, teamsMap, isActive = false, sameDay = false }: PhaseSectionProps) {
+export default function PhaseSection({ type, matches, teamsMap, isActive = false, sameDay = false }: PhaseSectionProps) {
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
 
   const standings = useMemo(

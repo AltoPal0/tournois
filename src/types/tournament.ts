@@ -20,7 +20,7 @@ export interface TournamentConfig {
   imagePosition?: { x: number; y: number }
 }
 
-export interface PhaseNodeData {
+export interface PhaseNodeData extends Record<string, unknown> {
   config: PhaseConfig
 }
 
