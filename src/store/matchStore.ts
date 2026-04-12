@@ -95,7 +95,11 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     await supabase.from('tt_matches').delete().eq('tournament_id', tournamentId)
 
     // Générer les nouveaux matchs
-    const newMatches = generateAllMatches(graph, tournamentId)
+    const { tournamentConfig } = useTournamentStore.getState()
+    const newMatches = generateAllMatches(graph, tournamentId, {
+      pistes: tournamentConfig?.pistes,
+      matchDate: tournamentConfig?.matchDate,
+    })
 
     if (newMatches.length > 0) {
       const { data } = await supabase

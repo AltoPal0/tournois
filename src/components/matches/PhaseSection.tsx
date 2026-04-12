@@ -87,15 +87,13 @@ function getTeamName(teamId: string | null, teamsMap: Map<string, TeamWithJoueur
 
 function formatHoraire(horaire: string | null): string | null {
   if (!horaire) return null
-  // Chaîne d'heure pure "HH:MM" ou "HH:MM:SS" (sans T ni espace)
-  if (!horaire.includes('T') && !horaire.includes(' ') && horaire.includes(':')) {
-    return horaire.slice(0, 5)
-  }
-  try {
-    return new Date(horaire).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return null
-  }
+  // Datetime ISO "2026-04-12T17:00:00..." : extraire la partie heure directement
+  // (pas de new Date pour éviter la conversion de timezone)
+  const tIdx = horaire.indexOf('T')
+  if (tIdx >= 0) return horaire.slice(tIdx + 1, tIdx + 6)
+  // Chaîne d'heure pure "HH:MM" ou "HH:MM:SS"
+  if (horaire.includes(':')) return horaire.slice(0, 5)
+  return null
 }
 
 function horaireToInput(horaire: string | null): string {

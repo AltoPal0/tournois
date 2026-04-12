@@ -152,6 +152,58 @@ function PanelContent({
         </div>
       </div>
 
+      {/* Planification */}
+      <div className="flex flex-col gap-3">
+        <label className="block text-xs font-medium text-gray-500">Planification</label>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Heure de début</label>
+          <input
+            type="time"
+            value={config.heureDebut ?? ''}
+            onChange={(e) => updatePhaseConfig(nodeId, { heureDebut: e.target.value || undefined })}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+              transition-shadow duration-150"
+          />
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="block text-xs text-gray-400 mb-1">Durée match (min)</label>
+            <input
+              type="number"
+              min={1}
+              value={config.dureeMatch ?? ''}
+              placeholder="ex: 75"
+              onChange={(e) =>
+                updatePhaseConfig(nodeId, {
+                  dureeMatch: e.target.value ? Math.max(1, parseInt(e.target.value) || 1) : undefined,
+                })
+              }
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                transition-shadow duration-150"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs text-gray-400 mb-1">Repos (min)</label>
+            <input
+              type="number"
+              min={0}
+              value={config.reposMatch ?? ''}
+              placeholder="ex: 15"
+              onChange={(e) =>
+                updatePhaseConfig(nodeId, {
+                  reposMatch: e.target.value ? Math.max(0, parseInt(e.target.value) || 0) : undefined,
+                })
+              }
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                transition-shadow duration-150"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Input count */}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">

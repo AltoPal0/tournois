@@ -37,6 +37,8 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   const isSaving = useTournamentStore((s) => s.isSaving)
 
   const [rawUrl, setRawUrl] = useState('')
+  const [rawPistes, setRawPistes] = useState('')
+  const [pistesError, setPistesError] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -45,13 +47,15 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   const dragStart = useRef({ x: 0, y: 0 })
   const posStart = useRef({ x: 50, y: 50 })
 
-  // Synchroniser rawUrl à l'ouverture
+  // Synchroniser rawUrl et rawPistes à l'ouverture
   useEffect(() => {
     if (isOpen) {
       setRawUrl(tournamentImageUrl ?? '')
+      setRawPistes(tournamentConfig.pistes?.join(', ') ?? '')
+      setPistesError(false)
       setConfirmDelete(false)
     }
-  }, [isOpen, tournamentImageUrl])
+  }, [isOpen, tournamentImageUrl, tournamentConfig.pistes])
 
   if (!isOpen) return null
 
@@ -63,6 +67,27 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
     const normalized = normalizeImageUrl(rawUrl)
     setRawUrl(normalized)
     setTournamentImageUrl(normalized || null)
+  }
+
+  function handlePistesBlur() {
+    const trimmed = rawPistes.trim()
+    if (!trimmed) {
+      setPistesError(false)
+      update({ pistes: undefined })
+      return
+    }
+    const isValid = /^\s*\d+(\s*,\s*\d+)*\s*$/.test(trimmed)
+    if (!isValid) {
+      setPistesError(true)
+      return
+    }
+    const parsed = trimmed.split(',').map((s) => parseInt(s.trim(), 10))
+    if (parsed.some((n) => n <= 0)) {
+      setPistesError(true)
+      return
+    }
+    setPistesError(false)
+    update({ pistes: parsed })
   }
 
   const imagePos = tournamentConfig.imagePosition ?? { x: 50, y: 50 }
@@ -195,6 +220,32 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
               />
             </div>
           )}
+
+          {/* Pistes disponibles */}
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Pistes disponibles
+            </label>
+            <input
+              type="text"
+              value={rawPistes}
+              onChange={(e) => { setRawPistes(e.target.value); setPistesError(false) }}
+              onBlur={handlePistesBlur}
+              placeholder="Ex : 1, 2, 3"
+              className={`w-full px-3 py-2 text-sm border rounded-lg
+                focus:outline-none focus:ring-2 focus:border-transparent
+                transition-shadow duration-150
+                ${pistesError
+                  ? 'border-red-400 focus:ring-red-400'
+                  : 'border-gray-200 focus:ring-blue-500'
+                }`}
+            />
+            {pistesError && (
+              <p className="text-xs text-red-500 mt-1">
+                Entrée invalide — ex : 1, 2, 3
+              </p>
+            )}
+          </div>
 
           {/* Effacer le tournoi — dernière option */}
           <div className="border-t border-gray-100 pt-2">

@@ -13,12 +13,16 @@ export interface PhaseConfig {
   outputs: PhaseOutput[]
   setsCount?: 1 | 2 | 3
   roundCount?: number
+  heureDebut?: string
+  dureeMatch?: number
+  reposMatch?: number
 }
 
 export interface TournamentConfig {
   sameDay: boolean
   matchDate: string | null
   imagePosition?: { x: number; y: number }
+  pistes?: number[]
 }
 
 export interface PhaseNodeData extends Record<string, unknown> {

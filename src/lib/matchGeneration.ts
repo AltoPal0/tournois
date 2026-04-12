@@ -1,4 +1,4 @@
-import type { TournamentGraph, SerializedNode, Match } from '../types/tournament'
+import type { TournamentGraph, SerializedNode, Match, PhaseConfig } from '../types/tournament'
 
 type NewMatch = Omit<Match, 'id' | 'created_at'>
 
@@ -422,12 +422,170 @@ export function computeInputSlotPairs(
 }
 
 // ---------------------------------------------------------------------------
+// Planification automatique : pistes + horaires
+// ---------------------------------------------------------------------------
+
+/**
+ * Calcule la profondeur topologique de chaque nœud (0 = racine).
+ * Deux nœuds à la même profondeur peuvent jouer en parallèle.
+ */
+function computeNodeDepths(graph: TournamentGraph): Map<string, number> {
+  const depths = new Map<string, number>()
+  for (const node of graph.nodes) depths.set(node.id, 0)
+
+  // BFS depuis les racines
+  const inDegree = new Map<string, number>()
+  const children = new Map<string, string[]>()
+  for (const node of graph.nodes) {
+    inDegree.set(node.id, 0)
+    children.set(node.id, [])
+  }
+  for (const edge of graph.edges) {
+    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1)
+    children.get(edge.source)!.push(edge.target)
+  }
+
+  const queue = graph.nodes.filter((n) => inDegree.get(n.id) === 0).map((n) => n.id)
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    const depth = depths.get(id) ?? 0
+    for (const childId of children.get(id) ?? []) {
+      const newDepth = depth + 1
+      if (newDepth > (depths.get(childId) ?? 0)) depths.set(childId, newDepth)
+      inDegree.set(childId, inDegree.get(childId)! - 1)
+      if (inDegree.get(childId) === 0) queue.push(childId)
+    }
+  }
+
+  return depths
+}
+
+/**
+ * Convertit une heure "HH:MM" en minutes depuis minuit.
+ */
+function timeToMinutes(time: string): number {
+  const [hh, mm] = time.split(':').map(Number)
+  return (hh ?? 0) * 60 + (mm ?? 0)
+}
+
+/**
+ * Convertit des minutes depuis minuit en string "HH:MM".
+ */
+function minutesToTimeString(totalMin: number): string {
+  const h = Math.floor(totalMin / 60) % 24
+  const m = totalMin % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+/**
+ * Assigne pistes et horaires à tous les matchs générés.
+ * Regroupe les phases par profondeur topologique et interleave leurs matchs
+ * round par round, en partageant les courts disponibles.
+ */
+function assignScheduleToMatches(
+  allMatches: NewMatch[],
+  graph: TournamentGraph,
+  pistes: number[],
+  matchDate: string | null,
+): void {
+  if (pistes.length === 0) return
+
+  const depths = computeNodeDepths(graph)
+  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]))
+
+  // Grouper les nœuds par profondeur
+  const byDepth = new Map<number, string[]>()
+  for (const node of graph.nodes) {
+    if (node.data.config.type === 'super_americana') continue
+    const d = depths.get(node.id) ?? 0
+    if (!byDepth.has(d)) byDepth.set(d, [])
+    byDepth.get(d)!.push(node.id)
+  }
+
+  const P = pistes.length
+
+  for (const [, nodeIds] of [...byDepth.entries()].sort(([a], [b]) => a - b)) {
+    // Paramètres de timing : collectés seulement si heureDebut + dureeMatch présents
+    let heureDebutMin: number | null = null
+    let dureeMatch = 0
+    let reposMatch = 0
+
+    for (const nodeId of nodeIds) {
+      const config = nodeMap.get(nodeId)?.data.config as PhaseConfig | undefined
+      if (!config?.heureDebut || !config.dureeMatch) continue
+      const hm = timeToMinutes(config.heureDebut)
+      heureDebutMin = heureDebutMin === null ? hm : Math.min(heureDebutMin, hm)
+      dureeMatch = Math.max(dureeMatch, config.dureeMatch)
+      reposMatch = reposMatch === 0 ? (config.reposMatch ?? 0) : Math.min(reposMatch, config.reposMatch ?? 0)
+    }
+
+    const hasTimingConfig = heureDebutMin !== null && dureeMatch > 0
+
+    // Grouper les matchs par (nodeId, round)
+    const matchesByNode = new Map<string, Map<number, NewMatch[]>>()
+    for (const nodeId of nodeIds) {
+      matchesByNode.set(nodeId, new Map())
+    }
+    for (const match of allMatches) {
+      if (!nodeIds.includes(match.phase_node_id)) continue
+      const byRound = matchesByNode.get(match.phase_node_id)!
+      const r = match.round ?? 1
+      if (!byRound.has(r)) byRound.set(r, [])
+      byRound.get(r)!.push(match)
+    }
+
+    // Nombre max de rounds dans ce groupe
+    let maxRound = 0
+    for (const byRound of matchesByNode.values()) {
+      for (const r of byRound.keys()) maxRound = Math.max(maxRound, r)
+    }
+
+    let currentMin = heureDebutMin ?? 0
+
+    for (let r = 1; r <= maxRound; r++) {
+      // Interleaver les matchs de toutes les phases pour ce round
+      const matchesPerPhase: NewMatch[][] = nodeIds.map(
+        (nodeId) => matchesByNode.get(nodeId)?.get(r) ?? [],
+      )
+
+      const interleaved: NewMatch[] = []
+      const maxPerPhase = Math.max(...matchesPerPhase.map((m) => m.length))
+      for (let i = 0; i < maxPerPhase; i++) {
+        for (const phaseMatches of matchesPerPhase) {
+          if (i < phaseMatches.length) interleaved.push(phaseMatches[i])
+        }
+      }
+
+      if (interleaved.length === 0) continue
+
+      // Assigner courts (toujours) + horaires (seulement si timing configuré)
+      for (let i = 0; i < interleaved.length; i++) {
+        const courtIdx = i % P
+        interleaved[i].piste = pistes[courtIdx]
+
+        if (hasTimingConfig && matchDate) {
+          const batch = Math.floor(i / P)
+          const startMin = currentMin + batch * dureeMatch
+          interleaved[i].horaire = `${matchDate}T${minutesToTimeString(startMin)}:00`
+        }
+      }
+
+      if (hasTimingConfig) {
+        const batchCount = Math.ceil(interleaved.length / P)
+        currentMin += batchCount * dureeMatch + reposMatch
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Fonction principale
 // ---------------------------------------------------------------------------
 
 export function generateAllMatches(
   graph: TournamentGraph,
   tournamentId: string,
+  tournamentConfig?: { pistes?: number[]; matchDate?: string | null },
 ): NewMatch[] {
   const sortedNodes = topologicalSort(graph)
   const provenanceMap = buildProvenanceMap(graph)
@@ -448,6 +606,12 @@ export function generateAllMatches(
           : generateEliminationMatches(node, provenances, isRoot, tournamentId)
 
     allMatches.push(...matches)
+  }
+
+  // Planification automatique si pistes configurées
+  const pistes = tournamentConfig?.pistes ?? []
+  if (pistes.length > 0) {
+    assignScheduleToMatches(allMatches, graph, pistes, tournamentConfig?.matchDate ?? null)
   }
 
   return allMatches
