@@ -124,18 +124,59 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     // Calculer le nombre total d'équipes nécessaires
     const totalNeeded = rootNodes.reduce((sum, n) => sum + n.data.config.inputCount, 0)
 
-    // Récupérer les équipes disponibles
-    const { data: teams } = await supabase
-      .from('tt_teams')
-      .select('id')
-      .limit(totalNeeded)
+    // Résoudre la liste des équipes selon joueurs inscrits ou pool global
+    const { tournamentConfig } = useTournamentStore.getState()
+    const inscrits = tournamentConfig?.joueursInscrits
 
-    if (!teams || teams.length < totalNeeded) {
-      set({ isAssigning: false })
-      return
+    let teams: { id: string }[]
+
+    if (inscrits && inscrits.length > 0) {
+      // Récupérer les IDs des joueurs inscrits
+      const { data: joueurs } = await supabase.from('tt_joueurs').select('id, prenom')
+      if (!joueurs) { set({ isAssigning: false }); return }
+
+      const nameSet = new Set(inscrits.map((n) => n.toLowerCase()))
+      const playerIds = shuffle(
+        joueurs.filter((j) => nameSet.has(j.prenom.toLowerCase())).map((j) => j.id),
+      )
+
+      if (playerIds.length < totalNeeded * 2) { set({ isAssigning: false }); return }
+
+      // Apparier les joueurs deux par deux et trouver/créer les équipes
+      const resolvedTeams: { id: string }[] = []
+      for (let i = 0; i < totalNeeded * 2; i += 2) {
+        const p1 = playerIds[i]
+        const p2 = playerIds[i + 1]
+
+        // Chercher équipe existante
+        const { data: existing } = await supabase
+          .from('tt_teams')
+          .select('id')
+          .or(`and(joueur1_id.eq.${p1},joueur2_id.eq.${p2}),and(joueur1_id.eq.${p2},joueur2_id.eq.${p1})`)
+          .limit(1)
+
+        if (existing && existing.length > 0) {
+          resolvedTeams.push({ id: existing[0].id })
+        } else {
+          const { data: created } = await supabase
+            .from('tt_teams')
+            .insert({ joueur1_id: p1, joueur2_id: p2 })
+            .select('id')
+            .single()
+          if (created) resolvedTeams.push({ id: created.id })
+        }
+      }
+
+      if (resolvedTeams.length < totalNeeded) { set({ isAssigning: false }); return }
+      teams = resolvedTeams
+    } else {
+      // Pool global : piocher dans les équipes existantes
+      const { data: allTeams } = await supabase.from('tt_teams').select('id').limit(totalNeeded)
+      if (!allTeams || allTeams.length < totalNeeded) { set({ isAssigning: false }); return }
+      teams = shuffle(allTeams)
     }
 
-    const shuffled = shuffle(teams)
+    const shuffled = teams
     let teamIndex = 0
 
     const { matches } = get()

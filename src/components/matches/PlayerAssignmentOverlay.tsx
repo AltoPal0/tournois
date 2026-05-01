@@ -3,6 +3,7 @@ import type { Joueur, Match, TournamentGraph, TeamWithJoueurs } from '../../type
 import { computeInputSlotPairs } from '../../lib/matchGeneration'
 import { supabase } from '../../lib/supabase'
 import { useMatchStore } from '../../store/matchStore'
+import { useTournamentStore } from '../../store/tournamentStore'
 
 // ---------------------------------------------------------------------------
 // Types locaux
@@ -213,6 +214,7 @@ export default function PlayerAssignmentOverlay({
   const assignRandomTeams = useMatchStore((s) => s.assignRandomTeams)
   const clearSlotAssignments = useMatchStore((s) => s.clearSlotAssignments)
   const isAssigning = useMatchStore((s) => s.isAssigning)
+  const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
 
   const [allPlayers, setAllPlayers] = useState<Joueur[]>([])
   const [slotPlayers, setSlotPlayers] = useState<Map<SlotKey, SlotPlayers>>(new Map())
@@ -228,17 +230,52 @@ export default function PlayerAssignmentOverlay({
     (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana',
   )
 
-  // Charger tous les joueurs
+  // Charger les joueurs (filtrés par inscrits si défini, avec création auto des manquants)
   useEffect(() => {
     if (!isOpen) return
-    supabase
-      .from('tt_joueurs')
-      .select('id, prenom, created_at')
-      .order('prenom')
-      .then(({ data }) => {
-        if (data) setAllPlayers(data as Joueur[])
-      })
-  }, [isOpen])
+    const inscrits = tournamentConfig.joueursInscrits
+
+    if (!inscrits || inscrits.length === 0) {
+      supabase
+        .from('tt_joueurs')
+        .select('id, prenom, created_at')
+        .order('prenom')
+        .then(({ data }) => {
+          if (data) setAllPlayers(data as Joueur[])
+        })
+      return
+    }
+
+    async function loadInscritPlayers() {
+      const { data } = await supabase.from('tt_joueurs').select('id, prenom, created_at')
+      const allDbPlayers = (data ?? []) as Joueur[]
+      const nameToPlayer = new Map(allDbPlayers.map((p) => [p.prenom.toLowerCase(), p]))
+
+      const result: Joueur[] = []
+      const toCreate: string[] = []
+
+      for (const name of inscrits!) {
+        const found = nameToPlayer.get(name.toLowerCase())
+        if (found) {
+          result.push(found)
+        } else {
+          toCreate.push(name)
+        }
+      }
+
+      if (toCreate.length > 0) {
+        const { data: created } = await supabase
+          .from('tt_joueurs')
+          .insert(toCreate.map((prenom) => ({ prenom })))
+          .select('id, prenom, created_at')
+        result.push(...((created ?? []) as Joueur[]))
+      }
+
+      setAllPlayers(result)
+    }
+
+    void loadInscritPlayers()
+  }, [isOpen, tournamentConfig.joueursInscrits])
 
   // Initialiser les slots depuis les matchs — seulement à l'ouverture de l'overlay.
   // Ne pas mettre matches/teamsMap en dépendances : le store se met à jour pendant les

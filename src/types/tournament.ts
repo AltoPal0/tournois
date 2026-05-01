@@ -23,6 +23,7 @@ export interface TournamentConfig {
   matchDate: string | null
   imagePosition?: { x: number; y: number }
   pistes?: number[]
+  joueursInscrits?: string[]
 }
 
 export interface PhaseNodeData extends Record<string, unknown> {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router'
 import { useTournamentStore } from '../../store/tournamentStore'
 import type { TournamentConfig } from '../../types/tournament'
 
@@ -34,28 +35,38 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   const tournamentImageUrl = useTournamentStore((s) => s.tournamentImageUrl)
   const setTournamentImageUrl = useTournamentStore((s) => s.setTournamentImageUrl)
   const saveTournament = useTournamentStore((s) => s.saveTournament)
+  const duplicateTournament = useTournamentStore((s) => s.duplicateTournament)
+  const tournamentName = useTournamentStore((s) => s.tournamentName)
   const isSaving = useTournamentStore((s) => s.isSaving)
+
+  const navigate = useNavigate()
 
   const [rawUrl, setRawUrl] = useState('')
   const [rawPistes, setRawPistes] = useState('')
   const [pistesError, setPistesError] = useState(false)
+  const [rawJoueurs, setRawJoueurs] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showCopyModal, setShowCopyModal] = useState(false)
+  const [copyName, setCopyName] = useState('')
+  const [isCopying, setIsCopying] = useState(false)
 
   const previewRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
   const dragStart = useRef({ x: 0, y: 0 })
   const posStart = useRef({ x: 50, y: 50 })
 
-  // Synchroniser rawUrl et rawPistes à l'ouverture
+  // Synchroniser rawUrl, rawPistes et rawJoueurs à l'ouverture
   useEffect(() => {
     if (isOpen) {
       setRawUrl(tournamentImageUrl ?? '')
       setRawPistes(tournamentConfig.pistes?.join(', ') ?? '')
       setPistesError(false)
+      setRawJoueurs(tournamentConfig.joueursInscrits?.join(', ') ?? '')
       setConfirmDelete(false)
+      setShowCopyModal(false)
     }
-  }, [isOpen, tournamentImageUrl, tournamentConfig.pistes])
+  }, [isOpen, tournamentImageUrl, tournamentConfig.pistes, tournamentConfig.joueursInscrits])
 
   if (!isOpen) return null
 
@@ -113,6 +124,17 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
     dragging.current = false
   }
 
+  function handleJoueursBlur() {
+    const trimmed = rawJoueurs.trim()
+    if (!trimmed) {
+      update({ joueursInscrits: undefined })
+      return
+    }
+    const names = [...new Set(trimmed.split(',').map((s) => s.trim()).filter(Boolean))]
+    setRawJoueurs(names.join(', '))
+    update({ joueursInscrits: names })
+  }
+
   async function handleSave() {
     await saveTournament()
     onClose()
@@ -121,6 +143,22 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   async function handleDelete() {
     setIsDeleting(true)
     await onDeleteTournament()
+  }
+
+  function openCopyModal() {
+    setCopyName(`${tournamentName} (copie)`)
+    setShowCopyModal(true)
+  }
+
+  async function handleCopy() {
+    if (!copyName.trim()) return
+    setIsCopying(true)
+    const newId = await duplicateTournament(copyName.trim())
+    setIsCopying(false)
+    if (newId) {
+      onClose()
+      navigate(`/tournament/${newId}`)
+    }
   }
 
   return (
@@ -244,6 +282,78 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
               <p className="text-xs text-red-500 mt-1">
                 Entrée invalide — ex : 1, 2, 3
               </p>
+            )}
+          </div>
+
+          {/* Joueurs inscrits */}
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Joueurs inscrits
+            </label>
+            <textarea
+              value={rawJoueurs}
+              onChange={(e) => setRawJoueurs(e.target.value)}
+              onBlur={handleJoueursBlur}
+              placeholder="Alice, Bob, Charlie…"
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                transition-shadow duration-150 resize-none"
+            />
+            {(tournamentConfig.joueursInscrits?.length ?? 0) > 0 && (
+              <p className="text-xs text-gray-400 mt-1">
+                {tournamentConfig.joueursInscrits!.length} joueur(s) inscrit(s)
+              </p>
+            )}
+          </div>
+
+          {/* Copier le tournoi */}
+          <div className="border-t border-gray-100 pt-2">
+            {!showCopyModal ? (
+              <button
+                onClick={openCopyModal}
+                className="w-full px-3 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg
+                  hover:bg-blue-100 transition-colors duration-150 flex items-center justify-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                </svg>
+                Copier le tournoi
+              </button>
+            ) : (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 flex flex-col gap-3">
+                <p className="text-sm font-medium text-blue-700">Nom du nouveau tournoi</p>
+                <input
+                  type="text"
+                  value={copyName}
+                  onChange={(e) => setCopyName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleCopy(); if (e.key === 'Escape') setShowCopyModal(false) }}
+                  autoFocus
+                  className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowCopyModal(false)}
+                    className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200
+                      rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    disabled={isCopying || !copyName.trim()}
+                    className="flex-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg
+                      hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    {isCopying ? (
+                      <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : null}
+                    {isCopying ? 'Copie…' : 'Copier'}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 

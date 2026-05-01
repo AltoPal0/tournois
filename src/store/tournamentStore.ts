@@ -85,6 +85,7 @@ export interface TournamentState {
 
   loadTournament: (id: string) => Promise<void>
   saveTournament: () => Promise<void>
+  duplicateTournament: (newName: string) => Promise<string | null>
   reset: () => void
 }
 
@@ -300,6 +301,31 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
       .eq('id', tournamentId)
 
     set({ isDirty: false, isSaving: false })
+  },
+
+  duplicateTournament: async (newName) => {
+    const { tournamentName, tournamentLieu, tournamentImageUrl, tournamentConfig, nodes, edges } = get()
+
+    const graphConfig = {
+      nodes: nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
+      edges: edges.map((e) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle })),
+    }
+
+    const { data, error } = await supabase
+      .from('tt_tournaments')
+      .insert({
+        name: newName || `${tournamentName} (copie)`,
+        lieu: tournamentLieu,
+        image_url: tournamentImageUrl,
+        tournament_config: tournamentConfig,
+        graph_config: graphConfig,
+        status: 'draft',
+      })
+      .select('id')
+      .single()
+
+    if (error || !data) return null
+    return data.id as string
   },
 
   reset: () =>
