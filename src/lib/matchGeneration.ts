@@ -21,9 +21,14 @@ export function topologicalSort(graph: TournamentGraph): SerializedNode[] {
     adj.set(n.id, new Set())
   }
 
+  const seenEdges = new Set<string>()
   for (const e of graph.edges) {
-    adj.get(e.source)!.add(e.target)
-    inDegree.set(e.target, (inDegree.get(e.target) ?? 0) + 1)
+    const key = `${e.source}:${e.target}`
+    if (!seenEdges.has(key)) {
+      seenEdges.add(key)
+      adj.get(e.source)!.add(e.target)
+      inDegree.set(e.target, (inDegree.get(e.target) ?? 0) + 1)
+    }
   }
 
   const queue: string[] = []
