@@ -219,6 +219,10 @@ export default function PlayerAssignmentOverlay({
   const [allPlayers, setAllPlayers] = useState<Joueur[]>([])
   const [slotPlayers, setSlotPlayers] = useState<Map<SlotKey, SlotPlayers>>(new Map())
   const [pendingSlots, setPendingSlots] = useState<Set<SlotKey>>(new Set())
+  const [showJsonModal, setShowJsonModal] = useState(false)
+  const [jsonText, setJsonText] = useState('')
+  const [jsonError, setJsonError] = useState<string | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
 
   // Ref miroir de slotPlayers pour des lectures fraîches dans les callbacks async
   const slotPlayersRef = useRef<Map<SlotKey, SlotPlayers>>(new Map())
@@ -363,6 +367,94 @@ export default function PlayerAssignmentOverlay({
     onAssignmentChanged()
   }, [tournamentId, graph, assignRandomTeams, onAssignmentChanged])
 
+  const handleJsonImport = useCallback(async () => {
+    setJsonError(null)
+
+    let parsed: { teams: { player1: string; player2: string }[] }
+    try {
+      parsed = JSON.parse(jsonText)
+    } catch {
+      setJsonError('JSON invalide')
+      return
+    }
+    if (!Array.isArray(parsed?.teams)) {
+      setJsonError('Format invalide — attendu : { "teams": [{ "player1": "…", "player2": "…" }] }')
+      return
+    }
+
+    setIsImporting(true)
+
+    // Collecter tous les noms uniques
+    const allNames = new Set<string>()
+    for (const t of parsed.teams) {
+      if (t.player1?.trim()) allNames.add(t.player1.trim())
+      if (t.player2?.trim()) allNames.add(t.player2.trim())
+    }
+
+    // Trouver ou créer les joueurs
+    const { data: existingData } = await supabase.from('tt_joueurs').select('id, prenom, created_at')
+    const dbPlayers = (existingData ?? []) as Joueur[]
+    const nameToPlayer = new Map(dbPlayers.map((p) => [p.prenom.toLowerCase(), p]))
+
+    const playerMap = new Map<string, Joueur>()
+    const toCreate: string[] = []
+    for (const name of allNames) {
+      const found = nameToPlayer.get(name.toLowerCase())
+      if (found) playerMap.set(name, found)
+      else toCreate.push(name)
+    }
+
+    if (toCreate.length > 0) {
+      const { data: created } = await supabase
+        .from('tt_joueurs')
+        .insert(toCreate.map((prenom) => ({ prenom })))
+        .select('id, prenom, created_at')
+      for (const p of (created ?? []) as Joueur[]) {
+        playerMap.set(p.prenom, p)
+      }
+    }
+
+    // Construire la liste ordonnée des slots : node0.slot1, node0.slot2, ..., node1.slot1, ...
+    const slotList: { phaseNodeId: string; slot: number }[] = []
+    for (const node of rootNodes) {
+      for (let s = 1; s <= node.data.config.inputCount; s++) {
+        slotList.push({ phaseNodeId: node.id, slot: s })
+      }
+    }
+
+    // Assigner chaque équipe JSON au slot correspondant
+    for (let i = 0; i < Math.min(parsed.teams.length, slotList.length); i++) {
+      const team = parsed.teams[i]
+      const p1 = team.player1?.trim() ? playerMap.get(team.player1.trim()) : undefined
+      const p2 = team.player2?.trim() ? playerMap.get(team.player2.trim()) : undefined
+      const { phaseNodeId, slot } = slotList[i]
+      await assignPlayersToSlot(tournamentId, phaseNodeId, slot, p1?.id ?? null, p2?.id ?? null)
+    }
+
+    // Rafraîchir l'état local
+    const { data: freshTeamsData } = await supabase
+      .from('tt_teams')
+      .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
+    if (freshTeamsData) {
+      const freshTeamsMap = new Map<string, TeamWithJoueurs>()
+      for (const t of freshTeamsData as unknown as TeamWithJoueurs[]) freshTeamsMap.set(t.id, t)
+      const freshMatches = useMatchStore.getState().matches
+      setSlotPlayers(buildInitialSlots(graph, freshMatches, freshTeamsMap))
+    }
+
+    // Mettre à jour la liste des joueurs connus
+    setAllPlayers((prev) => {
+      const merged = new Map(prev.map((p) => [p.id, p]))
+      for (const p of playerMap.values()) merged.set(p.id, p)
+      return Array.from(merged.values()).sort((a, b) => a.prenom.localeCompare(b.prenom))
+    })
+
+    setIsImporting(false)
+    setShowJsonModal(false)
+    setJsonText('')
+    onAssignmentChanged()
+  }, [jsonText, rootNodes, assignPlayersToSlot, tournamentId, graph, onAssignmentChanged])
+
   const handleConfirm = () => {
     onAssignmentChanged()
     onClose()
@@ -407,6 +499,19 @@ export default function PlayerAssignmentOverlay({
             <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
           </svg>
           Tout effacer
+        </button>
+
+        <button
+          onClick={() => { setJsonText(''); setJsonError(null); setShowJsonModal(true) }}
+          disabled={isAssigning}
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium
+            border border-gray-200 text-gray-600 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-600
+            transition-all duration-200 disabled:opacity-40"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+          </svg>
+          Importer JSON
         </button>
 
         <button
@@ -483,6 +588,67 @@ export default function PlayerAssignmentOverlay({
           )}
         </div>
       </div>
+
+      {/* Modal import JSON */}
+      {showJsonModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col">
+            <div className="flex items-center justify-between px-6 pt-5 pb-3">
+              <h3 className="text-base font-semibold text-gray-900">Importer des équipes</h3>
+              <button
+                onClick={() => setShowJsonModal(false)}
+                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-6 pb-2">
+              <p className="text-xs text-gray-500 mb-2">
+                Collez un JSON de la forme <code className="bg-gray-100 px-1 rounded">{"{ \"teams\": [{\"player1\": \"…\", \"player2\": \"…\"}] }"}</code>.
+                Les équipes seront assignées dans l'ordre des slots.
+              </p>
+              <textarea
+                value={jsonText}
+                onChange={(e) => { setJsonText(e.target.value); setJsonError(null) }}
+                placeholder={'{\n  "teams": [\n    { "player1": "Alice", "player2": "Bob" }\n  ]\n}'}
+                rows={12}
+                autoFocus
+                className="w-full px-3 py-2.5 text-xs font-mono border border-gray-200 rounded-xl
+                  focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
+                  resize-none transition-shadow duration-150"
+              />
+              {jsonError && (
+                <p className="text-xs text-red-500 mt-1.5">{jsonError}</p>
+              )}
+            </div>
+
+            <div className="px-6 pb-5 pt-3 flex gap-3">
+              <button
+                onClick={() => setShowJsonModal(false)}
+                className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200
+                  rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => void handleJsonImport()}
+                disabled={isImporting || !jsonText.trim()}
+                className="flex-1 px-3 py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl
+                  hover:bg-purple-700 transition-colors disabled:opacity-50
+                  flex items-center justify-center gap-2"
+              >
+                {isImporting && (
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                )}
+                {isImporting ? 'Import en cours…' : 'Importer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Grille des pools */}
       <div className="flex-1 overflow-auto p-6">
