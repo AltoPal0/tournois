@@ -40,7 +40,7 @@ function ScoreButton({ label, onClick }: { label: '+' | '−'; onClick: () => vo
   return (
     <button
       onPointerDown={(e) => { e.preventDefault(); onClick() }}
-      className={`h-20 w-20 rounded-3xl flex items-center justify-center text-4xl font-thin
+      className={`h-14 w-14 rounded-2xl flex items-center justify-center text-2xl font-thin
         select-none transition-transform duration-75 active:scale-90
         ${label === '+'
           ? 'bg-padel-blue text-white shadow-lg shadow-padel-blue/25 hover:bg-padel-blue-light'
@@ -75,7 +75,7 @@ function TeamPanel({
 
       {/* Nom + balle */}
       <div className="flex items-center gap-2 mb-4 min-h-[1.75rem]">
-        <span className="text-lg font-bold leading-tight text-navy-900">
+        <span className="text-2xl font-bold leading-tight text-navy-900">
           {name ?? 'Équipe'}
         </span>
         {isLeading && <TennisBall className="w-5 h-5 shrink-0" />}

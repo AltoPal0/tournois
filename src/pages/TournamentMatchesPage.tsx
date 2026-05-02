@@ -11,6 +11,7 @@ import PlayerSelectSheet from '../components/matches/PlayerSelectSheet'
 import NextMatchBanner from '../components/matches/NextMatchBanner'
 import { topologicalSort } from '../lib/matchGeneration'
 import { usePlayerIdentity } from '../hooks/usePlayerIdentity'
+import { usePullToRefresh, PULL_THRESHOLD } from '../hooks/usePullToRefresh'
 
 export default function TournamentMatchesPage() {
   const { id } = useParams<{ id: string }>()
@@ -37,6 +38,7 @@ export default function TournamentMatchesPage() {
   const [isPlayerOverlayOpen, setIsPlayerOverlayOpen] = useState(false)
   const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false)
   const [isActivating, setIsActivating] = useState(false)
+  // false = vue filtrée (matchs du joueur), true = tous les matchs
   const [showAllMatches, setShowAllMatches] = useState(false)
 
   const { identity, setIdentity, clearIdentity, findMyTeam } = usePlayerIdentity(id ?? '')
@@ -53,7 +55,6 @@ export default function TournamentMatchesPage() {
     }
   }, [id, loadTournament, loadMatches, subscribeToMatches, resetMatches, resetTournament])
 
-  // Charger toutes les équipes avec noms de joueurs
   const fetchTeams = useCallback(async () => {
     const { data } = await supabase
       .from('tt_teams')
@@ -71,13 +72,19 @@ export default function TournamentMatchesPage() {
     fetchTeams()
   }, [fetchTeams])
 
-  // Rafraîchir matchs + équipes après assignation
   const handleAssignmentChanged = useCallback(async () => {
     if (id) await loadMatches(id)
     await fetchTeams()
   }, [id, loadMatches, fetchTeams])
 
-  // Graphe sérialisé pour PlayerAssignmentOverlay et topologicalSort
+  // Rafraîchissement manuel (pull-to-refresh)
+  const handleRefresh = useCallback(async () => {
+    if (!id) return
+    await Promise.all([loadMatches(id), fetchTeams()])
+  }, [id, loadMatches, fetchTeams])
+
+  const { pullDistance, isRefreshing, touchHandlers } = usePullToRefresh(handleRefresh)
+
   const graph: TournamentGraph = useMemo(
     () => ({
       nodes: nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
@@ -92,7 +99,6 @@ export default function TournamentMatchesPage() {
     [nodes, edges],
   )
 
-  // Phases triées topologiquement, filtrées à celles qui ont des matchs
   const sortedPhases = useMemo(() => {
     if (nodes.length === 0 || matches.length === 0) return []
     const phaseIdsWithMatches = new Set(matches.map((m) => m.phase_node_id))
@@ -105,19 +111,17 @@ export default function TournamentMatchesPage() {
       }))
   }, [nodes, graph, matches])
 
-  // Init phase active sur la première phase dès que les données sont prêtes
   useEffect(() => {
     if (sortedPhases.length > 0 && !activePhaseId) {
       setActivePhaseId(sortedPhases[0].id)
     }
   }, [sortedPhases, activePhaseId])
 
-  // Reset filtre quand l'identité ou la phase change
+  // Réinitialiser le filtre uniquement quand le joueur change d'identité
   useEffect(() => {
     setShowAllMatches(false)
-  }, [identity?.joueurId, activePhaseId])
+  }, [identity?.joueurId])
 
-  // Phases racines (pour calcul assignation)
   const rootNodeIds = useMemo(
     () => new Set(nodes.filter((n) => !edges.some((e) => e.target === n.id)).map((n) => n.id)),
     [nodes, edges],
@@ -172,25 +176,36 @@ export default function TournamentMatchesPage() {
   const myTeam = findMyTeam(Array.from(teamsMap.values()))
   const myTeamId = myTeam?.id ?? null
 
-  // Matchs filtrés pour affichage (null = afficher tout)
-  const displayMatches = myTeamId && !showAllMatches
+  // La phase active contient-elle des matchs du joueur ?
+  const phaseHasMyMatches = myTeamId
+    ? activePhaseMatches.some((m) => m.equipe1_id === myTeamId || m.equipe2_id === myTeamId)
+    : false
+
+  // Filtre : seulement si la phase a des matchs du joueur ET showAllMatches est false
+  const displayMatches = myTeamId && phaseHasMyMatches && !showAllMatches
     ? activePhaseMatches.filter((m) => m.equipe1_id === myTeamId || m.equipe2_id === myTeamId)
     : undefined
 
-  // Prochain match du joueur (toutes phases confondues)
+  // Prochain match du joueur (toutes phases)
   const nextMatch = useMemo(() => {
     if (!myTeamId) return null
-    return matches
-      .filter(
-        (m) =>
-          m.statut === 'a_jouer' &&
-          (m.equipe1_id === myTeamId || m.equipe2_id === myTeamId),
-      )
-      .sort((a, b) => {
-        if (a.horaire && b.horaire) return a.horaire.localeCompare(b.horaire)
-        return a.ordre - b.ordre
-      })[0] ?? null
+    return (
+      matches
+        .filter(
+          (m) =>
+            m.statut === 'a_jouer' &&
+            (m.equipe1_id === myTeamId || m.equipe2_id === myTeamId),
+        )
+        .sort((a, b) => {
+          if (a.horaire && b.horaire) return a.horaire.localeCompare(b.horaire)
+          return a.ordre - b.ordre
+        })[0] ?? null
+    )
   }, [myTeamId, matches])
+
+  // Indicateur pull-to-refresh
+  const showPullIndicator = pullDistance > 0 || isRefreshing
+  const pullProgress = Math.min(pullDistance / PULL_THRESHOLD, 1)
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
@@ -276,19 +291,53 @@ export default function TournamentMatchesPage() {
         </div>
       )}
 
-      {/* Bannière prochain match */}
+      {/* Bannière prochain match — tap pour naviguer vers la bonne phase */}
       {nextMatch && (
-        <NextMatchBanner match={nextMatch} teamsMap={teamsMap} />
+        <NextMatchBanner
+          match={nextMatch}
+          teamsMap={teamsMap}
+          onClick={() => setActivePhaseId(nextMatch.phase_node_id)}
+        />
       )}
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Content scrollable avec pull-to-refresh */}
+      <div
+        className="flex-1 overflow-y-auto relative"
+        {...touchHandlers}
+      >
+        {/* Indicateur pull-to-refresh */}
+        {showPullIndicator && (
+          <div
+            className="absolute top-0 left-0 right-0 flex justify-center z-10 pointer-events-none"
+            style={{ paddingTop: `${Math.max(8, pullDistance * 0.8)}px` }}
+          >
+            <div
+              className="h-8 w-8 rounded-full bg-navy-900 flex items-center justify-center shadow-lg"
+              style={{
+                opacity: isRefreshing ? 1 : pullProgress,
+                transform: `scale(${isRefreshing ? 1 : 0.6 + pullProgress * 0.4})`,
+              }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className={`h-4 w-4 text-padel-gold ${isRefreshing ? 'animate-spin' : ''}`}
+                style={isRefreshing ? {} : { transform: `rotate(${pullDistance * 4}deg)` }}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </div>
+          </div>
+        )}
+
         {isLoading || (matches.length === 0 && !tournamentId) ? (
           <div className="flex items-center justify-center h-40">
             <div className="h-6 w-6 border-2 border-white/10 border-t-padel-blue rounded-full animate-spin" />
           </div>
         ) : matches.length === 0 ? (
-          /* État vide */
           <div className="flex flex-col items-center justify-center flex-1 px-6 py-20 text-center">
             {nodes.length === 0 ? (
               <>
@@ -353,8 +402,8 @@ export default function TournamentMatchesPage() {
           </div>
         ) : activePhase ? (
           <div className="px-3 sm:px-6 py-4 sm:py-6">
-            {/* Toggle filtre */}
-            {myTeamId && (
+            {/* Toggle filtre — visible uniquement si la phase contient des matchs du joueur */}
+            {phaseHasMyMatches && (
               <div className="flex justify-end mb-3">
                 <button
                   onClick={() => setShowAllMatches((v) => !v)}
@@ -378,7 +427,7 @@ export default function TournamentMatchesPage() {
         ) : null}
       </div>
 
-      {/* Overlay full-screen assignation joueurs */}
+      {/* Overlay assignation joueurs */}
       <PlayerAssignmentOverlay
         isOpen={isPlayerOverlayOpen}
         onClose={() => setIsPlayerOverlayOpen(false)}

@@ -3,6 +3,7 @@ import type { Match, TeamWithJoueurs } from '../../types/tournament'
 interface NextMatchBannerProps {
   match: Match
   teamsMap: Map<string, TeamWithJoueurs>
+  onClick?: () => void
 }
 
 function getTeamName(id: string | null | undefined, teamsMap: Map<string, TeamWithJoueurs>): string {
@@ -19,17 +20,24 @@ function formatTime(horaire: string | null | undefined): string | null {
   return null
 }
 
-export default function NextMatchBanner({ match, teamsMap }: NextMatchBannerProps) {
+export default function NextMatchBanner({ match, teamsMap, onClick }: NextMatchBannerProps) {
   const team1 = getTeamName(match.equipe1_id, teamsMap)
   const team2 = getTeamName(match.equipe2_id, teamsMap)
   const horaire = formatTime(match.horaire)
 
   return (
-    <div className="bg-navy-900 border-b border-white/5 px-4 py-2.5 flex items-center gap-3">
-      {/* Icône éclair */}
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-padel-gold shrink-0" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-      </svg>
+    <button
+      onClick={onClick}
+      className="w-full bg-navy-900 border-b border-white/5 px-4 py-2.5 flex items-center gap-3
+        text-left active:opacity-70 transition-opacity cursor-pointer"
+    >
+      {/* Icône éclair avec halo ping */}
+      <div className="relative flex items-center justify-center w-5 h-5 shrink-0">
+        <div className="absolute inset-0 rounded-full bg-padel-gold/30 animate-ping" />
+        <svg xmlns="http://www.w3.org/2000/svg" className="relative h-4 w-4 text-padel-gold" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+        </svg>
+      </div>
 
       {/* Texte central */}
       <div className="flex-1 min-w-0">
@@ -50,6 +58,6 @@ export default function NextMatchBanner({ match, teamsMap }: NextMatchBannerProp
           <div className="text-white/50 text-xs">Piste {match.piste}</div>
         )}
       </div>
-    </div>
+    </button>
   )
 }
