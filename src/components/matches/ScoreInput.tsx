@@ -8,7 +8,7 @@ import type { Match } from '../../types/tournament'
 // ---------------------------------------------------------------------------
 
 export function TennisBall({ className }: { className?: string }) {
-  return <GiTennisBall className={className} style={{ color: '#fbbf24' }} />
+  return <GiTennisBall className={className} style={{ color: '#f5c518' }} />
 }
 
 // ---------------------------------------------------------------------------
@@ -21,11 +21,11 @@ export function ScoreDisplay({ v1, v2 }: { v1: number; v2: number }) {
   return (
     <div className="flex flex-col items-end gap-0">
       <span className={`text-xl font-black font-mono leading-tight tabular-nums
-        ${team1Won ? 'text-blue-600' : 'text-gray-300'}`}>
+        ${team1Won ? 'text-padel-blue' : 'text-gray-300'}`}>
         {v1}
       </span>
       <span className={`text-xl font-black font-mono leading-tight tabular-nums
-        ${team2Won ? 'text-blue-600' : 'text-gray-300'}`}>
+        ${team2Won ? 'text-padel-blue' : 'text-gray-300'}`}>
         {v2}
       </span>
     </div>
@@ -40,11 +40,11 @@ function ScoreButton({ label, onClick }: { label: '+' | '−'; onClick: () => vo
   return (
     <button
       onPointerDown={(e) => { e.preventDefault(); onClick() }}
-      className={`h-16 w-16 rounded-2xl flex items-center justify-center text-3xl font-thin
+      className={`h-20 w-20 rounded-3xl flex items-center justify-center text-4xl font-thin
         select-none transition-transform duration-75 active:scale-90
         ${label === '+'
-          ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'
-          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+          ? 'bg-padel-blue text-white shadow-lg shadow-padel-blue/25 hover:bg-padel-blue-light'
+          : 'bg-navy-800 text-white hover:bg-navy-700'
         }`}
     >
       {label}
@@ -71,11 +71,11 @@ function TeamPanel({
 }) {
   return (
     <div className={`rounded-2xl p-4 transition-colors duration-200
-      ${isLeading ? 'bg-amber-50 ring-2 ring-amber-200' : 'bg-gray-50'}`}>
+      ${isLeading ? 'bg-navy-900/5 ring-2 ring-padel-gold/40' : 'bg-gray-50'}`}>
 
       {/* Nom + balle */}
       <div className="flex items-center gap-2 mb-4 min-h-[1.75rem]">
-        <span className="text-base font-semibold leading-tight text-gray-700">
+        <span className="text-lg font-bold leading-tight text-navy-900">
           {name ?? 'Équipe'}
         </span>
         {isLeading && <TennisBall className="w-5 h-5 shrink-0" />}
@@ -86,8 +86,8 @@ function TeamPanel({
         <ScoreButton label="−" onClick={onDec} />
         <span
           key={score}
-          className={`text-7xl font-black tabular-nums select-none
-            ${isLeading ? 'text-amber-700' : 'text-gray-800'}`}
+          className={`text-8xl font-black tabular-nums select-none
+            ${isLeading ? 'text-padel-gold' : 'text-navy-800'}`}
         >
           {score}
         </span>
@@ -135,20 +135,20 @@ export default function ScoreInput({ match, team1Name, team2Name, isOpen, onClos
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+        {/* Header navy */}
+        <div className="bg-navy-900 flex items-center justify-between px-5 pt-5 pb-4">
+          <span className="text-sm font-bold text-white/90 uppercase tracking-widest">
             {match.nom}
           </span>
           <button
             onClick={onClose}
-            className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center
-              text-gray-500 hover:bg-gray-200 transition-colors"
+            className="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center
+              text-white/60 hover:bg-white/20 hover:text-white transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -157,7 +157,7 @@ export default function ScoreInput({ match, team1Name, team2Name, isOpen, onClos
         </div>
 
         {/* Panneaux équipes */}
-        <div className="px-4 space-y-2.5 pb-3">
+        <div className="px-4 space-y-2.5 py-4">
           <TeamPanel
             name={team1Name}
             score={s1}
@@ -187,12 +187,12 @@ export default function ScoreInput({ match, team1Name, team2Name, isOpen, onClos
           <button
             onClick={handleConfirm}
             disabled={isTie}
-            className={`w-full h-14 rounded-2xl text-base font-semibold
+            className={`w-full h-16 rounded-2xl text-lg font-bold
               flex items-center justify-center gap-2
               transition-all duration-150
               ${isTie
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98] shadow-md shadow-blue-200'
+                : 'bg-padel-blue text-white hover:bg-padel-blue-light active:scale-[0.98] shadow-md shadow-padel-blue/25'
               }`}
           >
             {isTie ? (

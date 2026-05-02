@@ -9,9 +9,11 @@ interface PhaseSectionProps {
   name: string
   type: PhaseType
   matches: Match[]
+  displayMatches?: Match[]
   teamsMap: Map<string, TeamWithJoueurs>
   isActive?: boolean
   sameDay?: boolean
+  myTeamId?: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -48,8 +50,8 @@ function InlineEditCell({ display, inputValue, inputType, onSave, placeholder }:
           setDraft(inputValue)
           setEditing(true)
         }}
-        className="text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 px-1.5 py-0.5
-          rounded transition-colors duration-100 whitespace-nowrap"
+        className="text-xs text-navy-700/50 hover:text-padel-blue hover:bg-padel-blue/5 px-1.5 py-0.5
+          rounded transition-colors duration-100 whitespace-nowrap font-medium"
       >
         {display ?? <span className="text-gray-300">{placeholder ?? '—'}</span>}
       </button>
@@ -68,8 +70,8 @@ function InlineEditCell({ display, inputValue, inputType, onSave, placeholder }:
         if (e.key === 'Enter') commit()
         if (e.key === 'Escape') setEditing(false)
       }}
-      className="text-xs border border-blue-300 rounded px-1.5 py-0.5 w-24
-        focus:outline-none focus:border-blue-500"
+      className="text-xs border border-padel-blue/40 rounded px-1.5 py-0.5 w-24
+        focus:outline-none focus:border-padel-blue"
     />
   )
 }
@@ -87,11 +89,8 @@ function getTeamName(teamId: string | null, teamsMap: Map<string, TeamWithJoueur
 
 function formatHoraire(horaire: string | null): string | null {
   if (!horaire) return null
-  // Datetime ISO "2026-04-12T17:00:00..." : extraire la partie heure directement
-  // (pas de new Date pour éviter la conversion de timezone)
   const tIdx = horaire.indexOf('T')
   if (tIdx >= 0) return horaire.slice(tIdx + 1, tIdx + 6)
-  // Chaîne d'heure pure "HH:MM" ou "HH:MM:SS"
   if (horaire.includes(':')) return horaire.slice(0, 5)
   return null
 }
@@ -103,9 +102,7 @@ function horaireToInput(horaire: string | null): string {
 
 function horaireToTimeInput(horaire: string | null): string {
   if (!horaire) return ''
-  // Chaîne d'heure pure "HH:MM" ou "HH:MM:SS"
   if (!horaire.includes('T') && !horaire.includes(' ')) return horaire.slice(0, 5)
-  // Datetime : extraire la partie heure
   return horaire.slice(11, 16)
 }
 
@@ -132,12 +129,14 @@ function MatchCard({
   teamsMap,
   isActive,
   sameDay,
+  myTeamId,
   onScoreClick,
 }: {
   match: Match
   teamsMap: Map<string, TeamWithJoueurs>
   isActive: boolean
   sameDay: boolean
+  myTeamId?: string | null
   onScoreClick: (match: Match) => void
 }) {
   const updateMatchPiste = useMatchStore((s) => s.updateMatchPiste)
@@ -149,6 +148,9 @@ function MatchCard({
   const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
+  const isMyMatch = myTeamId
+    ? match.equipe1_id === myTeamId || match.equipe2_id === myTeamId
+    : false
 
   const pisteDisplay = match.piste != null ? `Piste ${match.piste}` : null
   const horaireDisplay = formatHoraire(match.horaire)
@@ -156,9 +158,13 @@ function MatchCard({
   return (
     <button
       onClick={canScore ? () => onScoreClick(match) : undefined}
-      className={`w-full text-left bg-white rounded-2xl border transition-all duration-150
-        ${canScore ? 'cursor-pointer active:scale-[0.99] hover:border-gray-200 hover:shadow-sm' : 'cursor-default'}
-        ${match.statut === 'termine' ? 'border-gray-100' : 'border-gray-150'}
+      className={`w-full text-left bg-white rounded-2xl border transition-all duration-200
+        ${canScore
+          ? 'cursor-pointer active:scale-[0.99] hover:shadow-[0_4px_16px_rgba(21,101,216,0.1)] hover:border-padel-blue/20'
+          : 'cursor-default'}
+        ${isMyMatch
+          ? 'ring-2 ring-padel-gold/60 border-padel-gold/30'
+          : match.statut === 'termine' ? 'border-gray-100' : 'border-gray-100'}
         shadow-[0_1px_3px_rgba(0,0,0,0.06)]
       `}
     >
@@ -167,15 +173,15 @@ function MatchCard({
         {/* Noms équipes */}
         <div className="flex-1 flex flex-col gap-1.5 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className={`text-sm leading-tight truncate font-medium
-              ${team1Name ? 'text-gray-800' : 'text-gray-300 italic'}`}>
+            <span className={`text-sm leading-tight truncate font-semibold
+              ${team1Name ? 'text-navy-900' : 'text-gray-300 italic'}`}>
               {team1Name ?? (match.equipe1_label ?? 'À assigner')}
             </span>
             {team1Won && <TennisBall className="w-3.5 h-3.5 shrink-0" />}
           </div>
           <div className="flex items-center gap-1.5">
-            <span className={`text-sm leading-tight truncate font-medium
-              ${team2Name ? 'text-gray-800' : 'text-gray-300 italic'}`}>
+            <span className={`text-sm leading-tight truncate font-semibold
+              ${team2Name ? 'text-navy-900' : 'text-gray-300 italic'}`}>
               {team2Name ?? (match.equipe2_label ?? 'À assigner')}
             </span>
             {team2Won && <TennisBall className="w-3.5 h-3.5 shrink-0" />}
@@ -187,7 +193,7 @@ function MatchCard({
           {hasScore ? (
             <ScoreDisplay v1={match.score_equipe1!} v2={match.score_equipe2!} />
           ) : isActive ? (
-            /* Actif : cellules inline éditables, toujours affichées */
+            /* Actif : cellules inline éditables */
             <div className="flex flex-col items-end gap-0.5" onClick={(e) => e.stopPropagation()}>
               <InlineEditCell
                 display={pisteDisplay}
@@ -210,8 +216,8 @@ function MatchCard({
           ) : (
             /* Brouillon : lecture seule */
             <div className="flex flex-col items-end gap-0.5">
-              <span className="text-xs text-gray-400 whitespace-nowrap">{pisteDisplay ?? ''}</span>
-              <span className="text-xs text-gray-400 whitespace-nowrap">{horaireDisplay ?? ''}</span>
+              <span className="text-xs text-gray-400 whitespace-nowrap font-medium">{pisteDisplay ?? ''}</span>
+              <span className="text-xs text-gray-400 whitespace-nowrap font-medium">{horaireDisplay ?? ''}</span>
             </div>
           )}
         </div>
@@ -224,7 +230,15 @@ function MatchCard({
 // Composant principal
 // ---------------------------------------------------------------------------
 
-export default function PhaseSection({ type, matches, teamsMap, isActive = false, sameDay = false }: PhaseSectionProps) {
+export default function PhaseSection({
+  type,
+  matches,
+  displayMatches,
+  teamsMap,
+  isActive = false,
+  sameDay = false,
+  myTeamId,
+}: PhaseSectionProps) {
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
 
   const standings = useMemo(
@@ -232,9 +246,11 @@ export default function PhaseSection({ type, matches, teamsMap, isActive = false
     [type, matches],
   )
 
+  const matchesToShow = displayMatches ?? matches
+
   const matchesByRound = useMemo(() => {
     const groups = new Map<number, Match[]>()
-    for (const m of matches) {
+    for (const m of matchesToShow) {
       const r = m.round ?? 0
       if (!groups.has(r)) groups.set(r, [])
       groups.get(r)!.push(m)
@@ -246,7 +262,7 @@ export default function PhaseSection({ type, matches, teamsMap, isActive = false
         label: getRoundLabel(type, round, roundMatches),
         matches: roundMatches,
       }))
-  }, [matches, type])
+  }, [matchesToShow, type])
 
   const scoringTeam1Name = scoringMatch ? getTeamName(scoringMatch.equipe1_id, teamsMap) : null
   const scoringTeam2Name = scoringMatch ? getTeamName(scoringMatch.equipe2_id, teamsMap) : null
@@ -263,7 +279,7 @@ export default function PhaseSection({ type, matches, teamsMap, isActive = false
       {/* Rounds / matchs */}
       {matchesByRound.map(({ round, label, matches: roundMatches }) => (
         <div key={round} className="mb-5">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5 px-0.5">
+          <h3 className="text-xs font-bold text-navy-700/50 uppercase tracking-wider mb-2.5 px-0.5">
             {label}
           </h3>
           <div className="space-y-2">
@@ -274,6 +290,7 @@ export default function PhaseSection({ type, matches, teamsMap, isActive = false
                 teamsMap={teamsMap}
                 isActive={isActive}
                 sameDay={sameDay}
+                myTeamId={myTeamId}
                 onScoreClick={setScoringMatch}
               />
             ))}

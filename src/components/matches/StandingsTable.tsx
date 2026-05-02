@@ -10,7 +10,7 @@ function TeamName({ teamId, teamsMap }: { teamId: string; teamsMap: Map<string, 
   const team = teamsMap.get(teamId)
   if (!team) return <span className="text-gray-300 italic text-xs">À assigner</span>
   return (
-    <span className="text-sm font-medium text-gray-900">
+    <span className="text-sm font-semibold text-navy-900">
       {team.joueur1.prenom} <span className="text-gray-400 font-normal">&</span> {team.joueur2.prenom}
     </span>
   )
@@ -18,14 +18,14 @@ function TeamName({ teamId, teamsMap }: { teamId: string; teamsMap: Map<string, 
 
 export default function StandingsTable({ standings, teamsMap }: StandingsTableProps) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+    <div className="bg-white rounded-2xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.08)]">
 
-      {/* En-tête */}
-      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
-        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Classement</span>
+      {/* En-tête navy */}
+      <div className="bg-navy-900 px-4 py-2.5 flex items-center justify-between">
+        <span className="text-[11px] font-bold text-white/60 uppercase tracking-wider">Classement</span>
         <div className="flex gap-2">
           {['J', 'G', 'D', 'P', '+/-'].map((h) => (
-            <span key={h} className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider w-6 text-center">
+            <span key={h} className="text-[11px] font-bold text-white/40 uppercase tracking-wider w-6 text-center">
               {h}
             </span>
           ))}
@@ -46,11 +46,11 @@ export default function StandingsTable({ standings, teamsMap }: StandingsTablePr
               <div
                 key={row.teamId}
                 className={`px-4 py-2.5 flex items-center gap-3
-                  ${isLeader ? 'bg-blue-50/50' : ''}`}
+                  ${isLeader ? 'bg-padel-blue/5 border-l-4 border-l-padel-blue' : 'pl-[calc(1rem+4px)]'}`}
               >
                 {/* Rang */}
-                <span className={`text-xs font-bold w-5 shrink-0 text-center
-                  ${isLeader ? 'text-blue-500' : 'text-gray-300'}`}>
+                <span className={`text-xs font-black w-5 shrink-0 text-center
+                  ${isLeader ? 'text-padel-blue' : 'text-gray-300'}`}>
                   {i + 1}
                 </span>
 
@@ -65,7 +65,7 @@ export default function StandingsTable({ standings, teamsMap }: StandingsTablePr
                   <span className="text-sm text-gray-500 w-6 text-center">{row.wins}</span>
                   <span className="text-sm text-gray-500 w-6 text-center">{row.losses}</span>
                   <span className={`text-sm font-bold w-6 text-center
-                    ${isLeader ? 'text-blue-600' : row.points > 0 ? 'text-gray-800' : 'text-gray-300'}`}>
+                    ${isLeader ? 'text-padel-blue' : row.points > 0 ? 'text-navy-900' : 'text-gray-300'}`}>
                     {hasPlayed ? row.points : (
                       <span className="text-gray-200 font-normal text-xs">—</span>
                     )}

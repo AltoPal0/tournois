@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+@theme {
+  --color-navy-900: #0d1b2a;
+  --color-navy-800: #1b2a3b;
+  --color-navy-700: #2c3e50;
+  --color-padel-blue: #1565d8;
+  --color-padel-blue-light: #1e7bf0;
+  --color-padel-gold: #f5c518;
+  --color-padel-gold-dark: #d4a017;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;

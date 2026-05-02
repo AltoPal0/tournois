@@ -7,7 +7,10 @@ import type { TeamWithJoueurs, TournamentGraph, PhaseType } from '../types/tourn
 import PhaseSection from '../components/matches/PhaseSection'
 import PhaseNav from '../components/matches/PhaseNav'
 import PlayerAssignmentOverlay from '../components/matches/PlayerAssignmentOverlay'
+import PlayerSelectSheet from '../components/matches/PlayerSelectSheet'
+import NextMatchBanner from '../components/matches/NextMatchBanner'
 import { topologicalSort } from '../lib/matchGeneration'
+import { usePlayerIdentity } from '../hooks/usePlayerIdentity'
 
 export default function TournamentMatchesPage() {
   const { id } = useParams<{ id: string }>()
@@ -32,7 +35,11 @@ export default function TournamentMatchesPage() {
   const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
   const [isPlayerOverlayOpen, setIsPlayerOverlayOpen] = useState(false)
+  const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false)
   const [isActivating, setIsActivating] = useState(false)
+  const [showAllMatches, setShowAllMatches] = useState(false)
+
+  const { identity, setIdentity, clearIdentity, findMyTeam } = usePlayerIdentity(id ?? '')
 
   useEffect(() => {
     if (!id) return
@@ -64,7 +71,7 @@ export default function TournamentMatchesPage() {
     fetchTeams()
   }, [fetchTeams])
 
-  // Rafraîchir matchs + équipes après assignation (overlay fermé ou modifié)
+  // Rafraîchir matchs + équipes après assignation
   const handleAssignmentChanged = useCallback(async () => {
     if (id) await loadMatches(id)
     await fetchTeams()
@@ -105,22 +112,22 @@ export default function TournamentMatchesPage() {
     }
   }, [sortedPhases, activePhaseId])
 
+  // Reset filtre quand l'identité ou la phase change
+  useEffect(() => {
+    setShowAllMatches(false)
+  }, [identity?.joueurId, activePhaseId])
+
   // Phases racines (pour calcul assignation)
   const rootNodeIds = useMemo(
     () => new Set(nodes.filter((n) => !edges.some((e) => e.target === n.id)).map((n) => n.id)),
     [nodes, edges],
   )
 
-  // Par type de phase, seuls certains matchs requièrent une assignation manuelle :
-  // - round_robin : tous les matchs (slots directs sur chaque tour)
-  // - elimination  : round 1 uniquement (les rounds suivants sont remplis par avancement)
-  // - tournante_libre : round 1 uniquement (les rounds suivants sont calculés en suisse)
   function requiredMatchesForType(phaseType: PhaseType, phaseMatches: typeof matches) {
     if (phaseType === 'round_robin') return phaseMatches
     return phaseMatches.filter((m) => m.round === 1)
   }
 
-  // Tous les matchs "requis" des phases racines ont-ils leurs deux équipes ?
   const allPlayersAssigned = useMemo(() => {
     const rootNodes = nodes.filter((n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana')
     if (rootNodes.length === 0) return false
@@ -131,7 +138,6 @@ export default function TournamentMatchesPage() {
     })
   }, [matches, nodes, rootNodeIds])
 
-  // Compte des équipes non assignées (slots requis des phases racines)
   const unassignedCount = useMemo(() => {
     const rootNodes = nodes.filter((n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana')
     let total = 0
@@ -162,42 +168,66 @@ export default function TournamentMatchesPage() {
   const isDraft = tournamentStatus === 'draft'
   const isActive = tournamentStatus === 'active'
 
+  // Identité joueur
+  const myTeam = findMyTeam(Array.from(teamsMap.values()))
+  const myTeamId = myTeam?.id ?? null
+
+  // Matchs filtrés pour affichage (null = afficher tout)
+  const displayMatches = myTeamId && !showAllMatches
+    ? activePhaseMatches.filter((m) => m.equipe1_id === myTeamId || m.equipe2_id === myTeamId)
+    : undefined
+
+  // Prochain match du joueur (toutes phases confondues)
+  const nextMatch = useMemo(() => {
+    if (!myTeamId) return null
+    return matches
+      .filter(
+        (m) =>
+          m.statut === 'a_jouer' &&
+          (m.equipe1_id === myTeamId || m.equipe2_id === myTeamId),
+      )
+      .sort((a, b) => {
+        if (a.horaire && b.horaire) return a.horaire.localeCompare(b.horaire)
+        return a.ordre - b.ordre
+      })[0] ?? null
+  }, [myTeamId, matches])
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
 
-      {/* Top bar */}
-      <div className="h-14 border-b border-gray-200 bg-white flex items-center px-3 sm:px-4 gap-2 sm:gap-4 shrink-0">
+      {/* Top bar navy */}
+      <div className="h-14 bg-navy-900 flex items-center px-3 sm:px-4 gap-2 sm:gap-4 shrink-0">
         <Link
           to="/"
-          className="text-gray-500 hover:text-gray-700 transition-colors duration-150
+          className="text-white/70 hover:text-white transition-colors duration-150
             flex items-center gap-1 shrink-0 p-1"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
           </svg>
-          <span className="hidden sm:inline text-sm">Accueil</span>
+          <span className="hidden sm:inline text-sm font-medium">Accueil</span>
         </Link>
 
         <div className="flex-1 flex justify-center items-center gap-2 min-w-0">
-          <span className="text-sm font-semibold text-gray-900 truncate">{tournamentName}</span>
+          <span className="text-sm font-bold text-white truncate">{tournamentName}</span>
           {isActive && (
-            <span className="shrink-0 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+            <span className="shrink-0 text-xs font-bold text-padel-gold bg-padel-gold/15 border border-padel-gold/25 px-2 py-0.5 rounded-full">
               En cours
             </span>
           )}
         </div>
 
-        {/* Boutons brouillon (gestion joueurs + activer) */}
+        {/* Boutons brouillon */}
         {isDraft && matches.length > 0 && (
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setIsPlayerOverlayOpen(true)}
               className="relative inline-flex items-center justify-center gap-1.5
-                h-9 px-2.5 sm:px-3 rounded-xl text-xs font-medium
+                h-9 px-2.5 sm:px-3 rounded-xl text-xs font-semibold
                 transition-all duration-200 active:scale-[0.98]
-                bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                bg-white/10 border border-white/10 text-white hover:bg-white/20"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white/70" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
               </svg>
               <span className="hidden sm:inline">Joueurs</span>
@@ -215,12 +245,12 @@ export default function TournamentMatchesPage() {
                 onClick={handleActivate}
                 disabled={isActivating}
                 className="inline-flex items-center justify-center gap-1.5
-                  h-9 px-2.5 sm:px-3 rounded-xl text-xs font-semibold
+                  h-9 px-2.5 sm:px-3 rounded-xl text-xs font-bold
                   transition-all duration-200 active:scale-[0.98] disabled:opacity-50
-                  bg-amber-400 text-amber-900 hover:bg-amber-300 shadow-sm"
+                  bg-padel-gold text-navy-900 hover:bg-padel-gold-dark shadow-sm"
               >
                 {isActivating ? (
-                  <div className="h-3.5 w-3.5 border-2 border-amber-900/30 border-t-amber-900 rounded-full animate-spin" />
+                  <div className="h-3.5 w-3.5 border-2 border-navy-900/30 border-t-navy-900 rounded-full animate-spin" />
                 ) : (
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
@@ -235,40 +265,46 @@ export default function TournamentMatchesPage() {
 
       {/* Phase nav */}
       {sortedPhases.length > 0 && (
-        <div className="shrink-0 bg-white border-b border-gray-200 py-1">
+        <div className="shrink-0">
           <PhaseNav
             phases={sortedPhases}
             activePhaseId={activePhaseId}
             onSelect={setActivePhaseId}
+            playerIdentity={identity}
+            onUserClick={() => setIsPlayerSheetOpen(true)}
           />
         </div>
+      )}
+
+      {/* Bannière prochain match */}
+      {nextMatch && (
+        <NextMatchBanner match={nextMatch} teamsMap={teamsMap} />
       )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {isLoading || (matches.length === 0 && !tournamentId) ? (
           <div className="flex items-center justify-center h-40">
-            <div className="h-6 w-6 border-2 border-gray-200 border-t-blue-600 rounded-full animate-spin" />
+            <div className="h-6 w-6 border-2 border-white/10 border-t-padel-blue rounded-full animate-spin" />
           </div>
         ) : matches.length === 0 ? (
-          /* État vide — tournoi configuré mais matchs pas encore générés */
+          /* État vide */
           <div className="flex flex-col items-center justify-center flex-1 px-6 py-20 text-center">
             {nodes.length === 0 ? (
-              /* Pas de phases configurées */
               <>
-                <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="w-14 h-14 rounded-2xl bg-navy-900/5 flex items-center justify-center mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-navy-700/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
                 </div>
-                <p className="text-gray-700 font-medium mb-1">Tournoi non configuré</p>
+                <p className="text-navy-900 font-semibold mb-1">Tournoi non configuré</p>
                 <p className="text-gray-400 text-sm mb-6">
                   Définissez les phases du tournoi avant de générer les matchs.
                 </p>
                 <Link
                   to={`/tournament/${id}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
-                    bg-gray-900 text-white hover:bg-gray-800 transition-all duration-200 active:scale-[0.98]"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+                    bg-navy-900 text-white hover:bg-navy-800 transition-all duration-200 active:scale-[0.98]"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
@@ -277,14 +313,13 @@ export default function TournamentMatchesPage() {
                 </Link>
               </>
             ) : (
-              /* Phases configurées, matchs pas encore générés */
               <>
-                <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+                <div className="w-14 h-14 rounded-2xl bg-padel-blue/10 flex items-center justify-center mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-padel-blue" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                   </svg>
                 </div>
-                <p className="text-gray-700 font-medium mb-1">Prêt à générer les matchs</p>
+                <p className="text-navy-900 font-semibold mb-1">Prêt à générer les matchs</p>
                 <p className="text-gray-400 text-sm mb-2">
                   {nodes.length} phase{nodes.length > 1 ? 's' : ''} configurée{nodes.length > 1 ? 's' : ''}
                 </p>
@@ -294,9 +329,9 @@ export default function TournamentMatchesPage() {
                 <button
                   onClick={handleGenerate}
                   disabled={isGenerating}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium
-                    bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200
-                    active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-blue-200"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold
+                    bg-padel-blue text-white hover:bg-padel-blue-light transition-all duration-200
+                    active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-padel-blue/25"
                 >
                   {isGenerating ? (
                     <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -318,13 +353,26 @@ export default function TournamentMatchesPage() {
           </div>
         ) : activePhase ? (
           <div className="px-3 sm:px-6 py-4 sm:py-6">
+            {/* Toggle filtre */}
+            {myTeamId && (
+              <div className="flex justify-end mb-3">
+                <button
+                  onClick={() => setShowAllMatches((v) => !v)}
+                  className="text-xs font-semibold text-padel-blue/70 hover:text-padel-blue transition-colors"
+                >
+                  {showAllMatches ? '← Mes matchs' : 'Voir tous les matchs'}
+                </button>
+              </div>
+            )}
             <PhaseSection
               name={activePhase.name}
               type={activePhase.type}
               matches={activePhaseMatches}
+              displayMatches={displayMatches}
               teamsMap={teamsMap}
               isActive={isActive}
               sameDay={tournamentConfig.sameDay}
+              myTeamId={myTeamId}
             />
           </div>
         ) : null}
@@ -339,6 +387,16 @@ export default function TournamentMatchesPage() {
         matches={matches}
         teamsMap={teamsMap}
         onAssignmentChanged={handleAssignmentChanged}
+      />
+
+      {/* Sheet identification joueur */}
+      <PlayerSelectSheet
+        isOpen={isPlayerSheetOpen}
+        onClose={() => setIsPlayerSheetOpen(false)}
+        currentIdentity={identity}
+        teamsMap={teamsMap}
+        onSelect={setIdentity}
+        onClear={clearIdentity}
       />
     </div>
   )
