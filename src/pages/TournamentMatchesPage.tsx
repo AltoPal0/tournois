@@ -210,8 +210,12 @@ export default function TournamentMatchesPage() {
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
 
-      {/* Top bar navy */}
-      <div className="h-14 bg-navy-900 flex items-center px-3 sm:px-4 gap-2 sm:gap-4 shrink-0">
+      {/* Top bar navy — safe area en haut pour téléphones avec notch/dynamic island */}
+      <div
+        className="bg-navy-900 shrink-0"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+      <div className="h-14 flex items-center px-3 sm:px-4 gap-2 sm:gap-4">
         <Link
           to="/"
           className="text-white/70 hover:text-white transition-colors duration-150
@@ -276,6 +280,7 @@ export default function TournamentMatchesPage() {
             )}
           </div>
         )}
+      </div>
       </div>
 
       {/* Phase nav */}
