@@ -1,0 +1,100 @@
+{
+    "teams": [
+        {
+            "player1": "Gilles",
+            "player2": "Steph"
+        },
+        {
+            "player1": "Sam",
+            "player2": "Jerome"
+        },
+        {
+            "player1": "Alex",
+            "player2": "Eric"
+        },
+        {
+            "player1": "Nico",
+            "player2": "Philippe B"
+        },
+        {
+            "player1": "Benoit",
+            "player2": "Marina"
+        },
+        {
+            "player1": "Yannick",
+            "player2": "Marc"
+        },
+        {
+            "player1": "Yusuf",
+            "player2": "Jorge"
+        },
+        {
+            "player1": "Pierre",
+            "player2": "Adrien"
+        },
+        {
+            "player1": "Fred",
+            "player2": "Yvan"
+        },
+        {
+            "player1": "Thierry",
+            "player2": "Jerome M"
+        },
+        {
+            "player1": "David",
+            "player2": "Joel"
+        },
+        {
+            "player1": "Max",
+            "player2": "James"
+        },
+        {
+            "player1": "Frederic H",
+            "player2": "François B"
+        },
+        {
+            "player1": "Renaud",
+            "player2": "Thibault"
+        },
+        {
+            "player1": "Ruth",
+            "player2": "Franscesco"
+        },
+        {
+            "player1": "André",
+            "player2": "Matthieu"
+        },
+        {
+            "player1": "Aurelie",
+            "player2": "Pascal"
+        },
+        {
+            "player1": "Sophie",
+            "player2": "Arnaud"
+        },
+        {
+            "player1": "Alexia",
+            "player2": "Philippe M"
+        },
+        {
+            "player1": "Constance",
+            "player2": "Arthur"
+        },
+        {
+            "player1": "Mathilde",
+            "player2": "Nico"
+        },
+        {
+            "player1": "Jennifer",
+            "player2": "Alexia"
+        },
+        {
+            "player1": "Gege",
+            "player2": "Dave"
+        },
+        {
+            "player1": "Rose",
+            "player2": "Edouard"
+        }
+    ]
+}

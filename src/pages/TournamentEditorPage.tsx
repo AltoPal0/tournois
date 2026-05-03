@@ -29,14 +29,25 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   const resetScores = useMatchStore((s) => s.resetScores)
   const clearMatches = useMatchStore((s) => s.clearMatches)
   const isGenerating = useMatchStore((s) => s.isGenerating)
+  const matches = useMatchStore((s) => s.matches)
+  const loadMatches = useMatchStore((s) => s.loadMatches)
   const [showConfirm, setShowConfirm] = useState(false)
   const [showConfigOverlay, setShowConfigOverlay] = useState(false)
   const [showActiveConfirm, setShowActiveConfirm] = useState(false)
 
+  const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
+
+  const canViewSchedule =
+    (tournamentConfig.pistes?.length ?? 0) > 0 &&
+    matches.some((m) => m.horaire != null)
+
   useEffect(() => {
-    if (id) loadTournament(id)
+    if (id) {
+      loadTournament(id)
+      loadMatches(id)
+    }
     return () => reset()
-  }, [id, loadTournament, reset])
+  }, [id, loadTournament, loadMatches, reset])
 
   const handleSave = useCallback(() => {
     if (tournamentStatus === 'active') {
@@ -137,6 +148,20 @@ const isDirty = useTournamentStore((s) => s.isDirty)
               />
             </div>
           </div>
+
+          {canViewSchedule && (
+            <button
+              onClick={() => navigate(`/tournament/${id}/schedule`)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
+                transition-all duration-200
+                bg-violet-600 text-white hover:bg-violet-700 active:scale-[0.98]"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-.293.707L13 10.414V15a1 1 0 01-.553.894l-4 2A1 1 0 017 17v-6.586L3.293 6.707A1 1 0 013 6V4z" clipRule="evenodd" />
+              </svg>
+              Planning des pistes
+            </button>
+          )}
 
           <button
             onClick={() => setShowConfirm(true)}
