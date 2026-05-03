@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router'
+import * as XLSX from 'xlsx'
 import { useTournamentStore } from '../store/tournamentStore'
 import { useMatchStore } from '../store/matchStore'
 import { supabase } from '../lib/supabase'
@@ -61,6 +62,8 @@ export default function CourtSchedulePage() {
 
   const loadTournament = useTournamentStore((s) => s.loadTournament)
   const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
+  const setTournamentConfig = useTournamentStore((s) => s.setTournamentConfig)
+  const saveTournament = useTournamentStore((s) => s.saveTournament)
   const nodes = useTournamentStore((s) => s.nodes)
   const tournamentName = useTournamentStore((s) => s.tournamentName)
   const resetTournament = useTournamentStore((s) => s.reset)
@@ -80,6 +83,9 @@ export default function CourtSchedulePage() {
   const [invalidPiste, setInvalidPiste] = useState<number | null>(null)
   const [updating, setUpdating] = useState<string | null>(null)
   const [teamNames, setTeamNames] = useState<Record<string, string>>({})
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [editingPiste, setEditingPiste] = useState<number | null>(null)
+  const [editPisteValue, setEditPisteValue] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -181,6 +187,73 @@ export default function CourtSchedulePage() {
       })
   }
 
+  // Variante qui ignore les matchs dans `exclude` (utilisé pour le multi-déplacement)
+  function isAvailableExcluding(matchId: string, targetPiste: number, targetStart: number, exclude: Set<string>): boolean {
+    const dm = matches.find((m) => m.id === matchId)
+    if (!dm) return false
+    const targetEnd = targetStart + getSlotDur(dm)
+    return !scheduled
+      .filter((m) => m.id !== matchId && !exclude.has(m.id) && m.piste === targetPiste)
+      .some((m) => {
+        const s = toMinutes(m.horaire!)
+        const e = s + getSlotDur(m)
+        return targetStart < e && targetEnd > s
+      })
+  }
+
+  function handleCardClick(e: React.MouseEvent, match: Match) {
+    e.stopPropagation()
+    if (e.shiftKey) {
+      // Sélectionne toute la phase
+      const phaseIds = new Set(matches.filter((m) => m.phase_node_id === match.phase_node_id).map((m) => m.id))
+      setSelected(phaseIds)
+    } else if (e.ctrlKey || e.metaKey) {
+      setSelected((prev) => {
+        const next = new Set(prev)
+        next.has(match.id) ? next.delete(match.id) : next.add(match.id)
+        return next
+      })
+    } else {
+      setSelected((prev) =>
+        prev.size === 1 && prev.has(match.id) ? new Set() : new Set([match.id])
+      )
+    }
+  }
+
+  async function shiftSelected(deltaMin: number) {
+    const toShift = matches.filter((m) => selected.has(m.id) && m.horaire != null)
+    if (!toShift.length) return
+    // Validation : pas de chevauchement avec les matchs non-sélectionnés
+    const allValid = toShift.every((m) => {
+      const newStart = toMinutes(m.horaire!) + deltaMin
+      if (newStart < MIN_TIME || newStart >= 24 * 60) return false
+      return isAvailableExcluding(m.id, m.piste!, newStart, selected)
+    })
+    if (!allValid) {
+      setInvalidPiste(-1) // signal visuel global
+      setTimeout(() => setInvalidPiste(null), 500)
+      return
+    }
+    setUpdating('bulk')
+    await Promise.all(toShift.map((m) =>
+      updateMatchHoraire(m.id, buildHoraire(toMinutes(m.horaire!) + deltaMin, datePart))
+    ))
+    setUpdating(null)
+  }
+
+  async function confirmRenamePiste(oldPiste: number, rawValue: string) {
+    setEditingPiste(null)
+    const newPiste = parseInt(rawValue, 10)
+    if (isNaN(newPiste) || newPiste <= 0 || (newPiste !== oldPiste && pistes.includes(newPiste))) return
+    if (newPiste === oldPiste) return
+    // Mettre à jour tous les matchs sur cette piste
+    const toUpdate = matches.filter((m) => m.piste === oldPiste)
+    await Promise.all(toUpdate.map((m) => updateMatchPiste(m.id, newPiste)))
+    // Mettre à jour tournament_config
+    setTournamentConfig({ ...tournamentConfig, pistes: pistes.map((p) => (p === oldPiste ? newPiste : p)) })
+    saveTournament()
+  }
+
   function snappedMinutes(clientY: number): number {
     if (!gridRef.current) return MIN_TIME
     const rect = gridRef.current.getBoundingClientRect()
@@ -203,12 +276,67 @@ export default function CourtSchedulePage() {
     setInvalidPiste(null)
   }
 
+  function exportExcel() {
+    // Créneaux horaires uniques triés
+    const times = [...new Set(scheduled.map((m) => toMinutes(m.horaire!)))].sort((a, b) => a - b)
+
+    const headers = ['Heure', ...pistes.map((p) => `Piste ${p}`)]
+    const rows = times.map((t) => {
+      const row: string[] = [fmtTime(t)]
+      pistes.forEach((piste) => {
+        const m = scheduled.find((x) => x.piste === piste && toMinutes(x.horaire!) === t)
+        if (m) {
+          const ph = getPhaseName(m)
+          const lbl = matchLabel(m.nom, m.ordre)
+          const teams = getTeamLine(m)
+          row.push(teams ? `${ph} — ${lbl}\n${teams}` : `${ph} — ${lbl}`)
+        } else {
+          row.push('')
+        }
+      })
+      return row
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+    ws['!cols'] = [{ wch: 7 }, ...pistes.map(() => ({ wch: 36 }))]
+    // Hauteur de ligne pour les cellules avec contenu multi-ligne
+    ws['!rows'] = [{ hpt: 18 }, ...rows.map(() => ({ hpt: 36 }))]
+    // Style en-têtes (gras) via cellules individuelles
+    headers.forEach((_, i) => {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: i })
+      if (ws[cellRef]) ws[cellRef].s = { font: { bold: true } }
+    })
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Planning')
+    XLSX.writeFile(wb, `planning-${tournamentName.replace(/\s+/g, '_')}.xlsx`)
+  }
+
   function handleDragOver(e: React.DragEvent, piste: number) {
     e.preventDefault()
     const d = draggingRef.current
     if (!d) return
     const snapped = snappedMinutes(e.clientY)
-    const valid = isAvailable(d.matchId, piste, snapped)
+    let valid: boolean
+    if (selected.has(d.matchId) && selected.size > 1) {
+      const anchor = matches.find((m) => m.id === d.matchId)
+      if (anchor?.horaire != null && anchor.piste != null) {
+        const deltaTime = snapped - toMinutes(anchor.horaire)
+        const deltaPiste = pistes.indexOf(piste) - pistes.indexOf(anchor.piste)
+        const toMove = matches.filter((m) => selected.has(m.id))
+        valid = toMove.every((m) => {
+          if (!m.horaire || m.piste == null) return true
+          const newPisteIdx = pistes.indexOf(m.piste) + deltaPiste
+          if (newPisteIdx < 0 || newPisteIdx >= pistes.length) return false
+          const newStart = toMinutes(m.horaire) + deltaTime
+          return newStart >= MIN_TIME && isAvailableExcluding(m.id, pistes[newPisteIdx], newStart, selected)
+        })
+      } else {
+        valid = isAvailable(d.matchId, piste, snapped)
+      }
+    } else {
+      valid = isAvailable(d.matchId, piste, snapped)
+    }
     setPreview({ piste, startMin: snapped })
     setInvalidPiste(valid ? null : piste)
     e.dataTransfer.dropEffect = valid ? 'move' : 'none'
@@ -230,19 +358,60 @@ export default function CourtSchedulePage() {
     setDragging(null)
     draggingRef.current = null
 
-    if (!isAvailable(matchId, piste, snapped)) {
-      setInvalidPiste(piste)
-      setTimeout(() => setInvalidPiste(null), 500)
-      return
-    }
+    if (selected.has(matchId) && selected.size > 1) {
+      // ── Multi-déplacement ──
+      const anchor = matches.find((m) => m.id === matchId)!
+      const deltaTime = anchor.horaire != null ? snapped - toMinutes(anchor.horaire) : 0
+      const deltaPiste = anchor.piste != null
+        ? pistes.indexOf(piste) - pistes.indexOf(anchor.piste)
+        : 0
+      const toMove = matches.filter((m) => selected.has(m.id))
 
-    setInvalidPiste(null)
-    setUpdating(matchId)
-    await Promise.all([
-      updateMatchPiste(matchId, piste),
-      updateMatchHoraire(matchId, buildHoraire(snapped, datePart)),
-    ])
-    setUpdating(null)
+      const allValid = toMove.every((m) => {
+        if (!m.horaire || m.piste == null) return true
+        const newPisteIdx = pistes.indexOf(m.piste) + deltaPiste
+        if (newPisteIdx < 0 || newPisteIdx >= pistes.length) return false
+        const newStart = toMinutes(m.horaire) + deltaTime
+        return newStart >= MIN_TIME && isAvailableExcluding(m.id, pistes[newPisteIdx], newStart, selected)
+      })
+
+      if (!allValid) {
+        setInvalidPiste(piste)
+        setTimeout(() => setInvalidPiste(null), 500)
+        return
+      }
+
+      setInvalidPiste(null)
+      setUpdating('bulk')
+      await Promise.all(toMove.flatMap((m) => {
+        const ops: Promise<void>[] = []
+        if (m.piste != null) {
+          const newPisteIdx = pistes.indexOf(m.piste) + deltaPiste
+          ops.push(updateMatchPiste(m.id, pistes[newPisteIdx]))
+        }
+        if (m.horaire != null) {
+          ops.push(updateMatchHoraire(m.id, buildHoraire(toMinutes(m.horaire) + deltaTime, datePart)))
+        } else {
+          ops.push(updateMatchHoraire(m.id, buildHoraire(snapped, datePart)))
+        }
+        return ops
+      }))
+      setUpdating(null)
+    } else {
+      // ── Déplacement simple ──
+      if (!isAvailable(matchId, piste, snapped)) {
+        setInvalidPiste(piste)
+        setTimeout(() => setInvalidPiste(null), 500)
+        return
+      }
+      setInvalidPiste(null)
+      setUpdating(matchId)
+      await Promise.all([
+        updateMatchPiste(matchId, piste),
+        updateMatchHoraire(matchId, buildHoraire(snapped, datePart)),
+      ])
+      setUpdating(null)
+    }
   }
 
   if (isLoading) {
@@ -313,6 +482,21 @@ export default function CourtSchedulePage() {
             })}
           </span>
         )}
+
+        <div className="flex-1" />
+
+        <button
+          onClick={exportExcel}
+          disabled={scheduled.length === 0}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
+            transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
+            bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98]"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+          Exporter Excel
+        </button>
       </div>
 
       {/* Body: grille + panneau latéral */}
@@ -328,10 +512,31 @@ export default function CourtSchedulePage() {
           {pistes.map((p) => (
             <div
               key={p}
-              className="shrink-0 flex items-center justify-center text-xs font-semibold text-gray-600 border-l border-gray-200"
+              className="shrink-0 flex items-center justify-center border-l border-gray-200 group"
               style={{ width: COL_W, height: HEADER_H }}
             >
-              Piste {p}
+              {editingPiste === p ? (
+                <input
+                  autoFocus
+                  type="number"
+                  value={editPisteValue}
+                  onChange={(e) => setEditPisteValue(e.target.value)}
+                  onBlur={() => confirmRenamePiste(p, editPisteValue)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmRenamePiste(p, editPisteValue)
+                    if (e.key === 'Escape') setEditingPiste(null)
+                  }}
+                  className="w-16 text-center text-xs font-semibold border border-blue-400 rounded px-1 py-0.5 outline-none"
+                />
+              ) : (
+                <span
+                  className="text-xs font-semibold text-gray-600 cursor-pointer hover:text-blue-600 select-none"
+                  title="Double-cliquer pour renommer"
+                  onDoubleClick={() => { setEditingPiste(p); setEditPisteValue(String(p)) }}
+                >
+                  Piste {p}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -352,7 +557,12 @@ export default function CourtSchedulePage() {
           </div>
 
           {/* Court columns */}
-          <div ref={gridRef} className="flex relative" style={{ height: gridH }}>
+          <div
+            ref={gridRef}
+            className="flex relative"
+            style={{ height: gridH }}
+            onClick={() => setSelected(new Set())}
+          >
             {pistes.map((piste) => {
               const isInvalid = invalidPiste === piste
               const isHover = preview?.piste === piste || isInvalid
@@ -387,7 +597,8 @@ export default function CourtSchedulePage() {
                     const slotH = getSlotDur(match) * PPM
                     const top = (startMin - MIN_TIME) * PPM
                     const isDraggingThis = dragging?.matchId === match.id
-                    const isUpdatingThis = updating === match.id
+                    const isUpdatingThis = updating === match.id || updating === 'bulk'
+                    const isSelected = selected.has(match.id)
                     const teamLine = getTeamLine(match)
                     const phaseName = getPhaseName(match)
                     const label = matchLabel(match.nom, match.ordre)
@@ -403,9 +614,11 @@ export default function CourtSchedulePage() {
                           draggable
                           onDragStart={(e) => handleDragStart(e, match)}
                           onDragEnd={handleDragEnd}
+                          onClick={(e) => handleCardClick(e, match)}
                           className={[
                             'absolute inset-x-0 top-0 rounded-lg border px-2.5 py-1.5 cursor-grab active:cursor-grabbing select-none overflow-hidden transition-opacity',
                             isDraggingThis ? 'opacity-30' : 'opacity-100',
+                            isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : '',
                             match.statut === 'termine'
                               ? 'bg-emerald-50 border-emerald-200'
                               : 'bg-blue-50 border-blue-200 hover:border-blue-300',
@@ -479,13 +692,22 @@ export default function CourtSchedulePage() {
           <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-3">
             {Object.values(unscheduledByPhase).map(({ phaseName, matches: phaseMatches }) => (
               <div key={phaseName}>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1 px-1">
-                  {phaseName}
-                </p>
+                <div className="flex items-center justify-between mb-1 px-1">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                    {phaseName}
+                  </p>
+                  <button
+                    onClick={() => setSelected(new Set(phaseMatches.map((m) => m.id)))}
+                    className="text-[10px] text-blue-500 hover:text-blue-700 font-medium"
+                  >
+                    tout
+                  </button>
+                </div>
                 <div className="flex flex-col gap-1">
                   {phaseMatches.map((match) => {
                     const isDraggingThis = dragging?.matchId === match.id
-                    const isUpdatingThis = updating === match.id
+                    const isUpdatingThis = updating === match.id || updating === 'bulk'
+                    const isSelected = selected.has(match.id)
                     const teamLine = getTeamLine(match)
                     const label = matchLabel(match.nom, match.ordre)
                     return (
@@ -494,9 +716,11 @@ export default function CourtSchedulePage() {
                         draggable
                         onDragStart={(e) => handleDragStart(e, match)}
                         onDragEnd={handleDragEnd}
+                        onClick={(e) => handleCardClick(e, match)}
                         className={[
                           'rounded-lg border px-2.5 py-2 cursor-grab active:cursor-grabbing select-none transition-opacity relative',
                           isDraggingThis ? 'opacity-30' : 'opacity-100',
+                          isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : '',
                           'bg-amber-50 border-amber-200 hover:border-amber-300',
                         ].join(' ')}
                       >
@@ -524,6 +748,65 @@ export default function CourtSchedulePage() {
       )}
 
       </div>
+
+      {/* Toolbar flottante multi-sélection */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2
+          bg-gray-900 text-white rounded-xl shadow-xl px-4 py-2.5 text-sm">
+          <span className="text-gray-300 text-xs mr-1">{selected.size} sélectionné{selected.size > 1 ? 's' : ''}</span>
+          <div className="w-px h-4 bg-gray-600" />
+          {/* Expand selection */}
+          <button
+            onClick={() => {
+              // Toute la colonne : toutes les cartes des mêmes pistes
+              const selPistes = new Set(
+                scheduled.filter((m) => selected.has(m.id) && m.piste != null).map((m) => m.piste!)
+              )
+              const next = new Set(selected)
+              scheduled.forEach((m) => { if (m.piste != null && selPistes.has(m.piste)) next.add(m.id) })
+              setSelected(next)
+            }}
+            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-700 hover:bg-gray-600 transition-colors"
+          >
+            ↕ Colonne
+          </button>
+          <button
+            onClick={() => {
+              // Ligne + dessous : cartes à partir du min horaire de la sélection
+              const minTime = Math.min(
+                ...scheduled.filter((m) => selected.has(m.id) && m.horaire != null).map((m) => toMinutes(m.horaire!))
+              )
+              const next = new Set(selected)
+              scheduled.forEach((m) => {
+                if (m.horaire != null && toMinutes(m.horaire) >= minTime) next.add(m.id)
+              })
+              setSelected(next)
+            }}
+            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-700 hover:bg-gray-600 transition-colors"
+          >
+            ↓ Ligne+bas
+          </button>
+          <div className="w-px h-4 bg-gray-600" />
+          {([-30, -15, 15, 30] as const).map((d) => (
+            <button
+              key={d}
+              onClick={() => shiftSelected(d)}
+              disabled={updating === 'bulk'}
+              className="px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-700 hover:bg-gray-600
+                disabled:opacity-40 transition-colors"
+            >
+              {d > 0 ? '+' : ''}{d}min
+            </button>
+          ))}
+          <div className="w-px h-4 bg-gray-600" />
+          <button
+            onClick={() => setSelected(new Set())}
+            className="px-2 py-1 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   )
 }
