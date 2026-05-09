@@ -1,7 +1,7 @@
 // Cache uniquement les assets avec hash de contenu (JS, CSS).
 // index.html n'est JAMAIS mis en cache : il change à chaque deploy
 // et doit toujours venir du réseau pour pointer les bons bundles.
-const CACHE_NAME = 'padel-assets-v3'
+const CACHE_NAME = 'padel-assets-v4'
 
 self.addEventListener('install', (e) => {
   // Pas de pre-cache : les assets seront mis en cache à la demande
