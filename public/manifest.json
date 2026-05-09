@@ -2,7 +2,7 @@
   "name": "Tournois de Padel",
   "short_name": "Padel",
   "description": "Gestion de tournois de padel",
-  "start_url": "/",
+  "start_url": "/steph",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#0d1b2a",
