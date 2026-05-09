@@ -342,6 +342,99 @@ function getInternalProvenance(
 }
 
 // ---------------------------------------------------------------------------
+// Américano : N équipes, R rounds, appariements par rotation (cercle)
+// Garantit zéro doublon pour R ≤ N-1. Au-delà, les rounds cyclent.
+// ---------------------------------------------------------------------------
+
+/**
+ * Génère le planning des rounds pour l'américano.
+ * Réutilise l'algorithme du cercle (round-robin complet) en prenant les R
+ * premiers rounds. Chaque paire (a, b) = slot a vs slot b.
+ */
+function generateAmericanoSchedule(n: number, rounds: number): [number, number][][] {
+  if (n < 2) return []
+  const fullRR = circleSchedule(n)
+  const schedule: [number, number][][] = []
+  for (let r = 0; r < rounds; r++) {
+    schedule.push(fullRR[r % fullRR.length])
+  }
+  return schedule
+}
+
+function generateAmericanoMatches(
+  node: SerializedNode,
+  provenances: ProvenanceSlot[],
+  isRoot: boolean,
+  tournamentId: string,
+): NewMatch[] {
+  const { config } = node.data
+  const rounds = config.roundCount ?? 3
+  const n = config.inputCount
+  const provenanceBySlot = new Map(provenances.map((p) => [p.inputIndex, p.label]))
+  const schedule = generateAmericanoSchedule(n, rounds)
+  const matches: NewMatch[] = []
+  let ordre = 1
+
+  for (let r = 0; r < schedule.length; r++) {
+    const roundPairs = schedule[r]
+    for (let m = 0; m < roundPairs.length; m++) {
+      const [s1, s2] = roundPairs[m]
+      matches.push({
+        tournament_id: tournamentId,
+        phase_node_id: node.id,
+        nom: `Round ${r + 1} Match ${m + 1} de ${config.name}`,
+        statut: 'a_jouer',
+        equipe1_id: null,
+        equipe2_id: null,
+        equipe1_label: isRoot ? null : (provenanceBySlot.get(s1) ?? null),
+        equipe2_label: isRoot ? null : (provenanceBySlot.get(s2) ?? null),
+        horaire: null,
+        piste: null,
+        ordre,
+        round: r + 1,
+        score_equipe1: null,
+        score_equipe2: null,
+      })
+      ordre++
+    }
+  }
+
+  return matches
+}
+
+// ---------------------------------------------------------------------------
+// Match simple : un seul match entre 2 équipes
+// ---------------------------------------------------------------------------
+
+function generateMatchSimpleMatches(
+  node: SerializedNode,
+  provenances: ProvenanceSlot[],
+  isRoot: boolean,
+  tournamentId: string,
+): NewMatch[] {
+  const { config } = node.data
+  const provenanceBySlot = new Map(provenances.map((p) => [p.inputIndex, p.label]))
+  return [
+    {
+      tournament_id: tournamentId,
+      phase_node_id: node.id,
+      nom: config.name,
+      statut: 'a_jouer',
+      equipe1_id: null,
+      equipe2_id: null,
+      equipe1_label: isRoot ? null : (provenanceBySlot.get(1) ?? null),
+      equipe2_label: isRoot ? null : (provenanceBySlot.get(2) ?? null),
+      horaire: null,
+      piste: null,
+      ordre: 1,
+      round: 1,
+      score_equipe1: null,
+      score_equipe2: null,
+    },
+  ]
+}
+
+// ---------------------------------------------------------------------------
 // Tournante libre : format suisse, rounds × N/2 matchs
 // ---------------------------------------------------------------------------
 
@@ -390,10 +483,27 @@ function generateTournantreLibreMatches(
  * sont retournés (round robin: tous, élimination: round 1 uniquement).
  */
 export function computeInputSlotPairs(
-  phaseType: 'round_robin' | 'elimination' | 'tournante_libre',
+  phaseType: 'round_robin' | 'elimination' | 'tournante_libre' | 'match_simple' | 'americano',
   inputCount: number,
+  roundCount?: number,
 ): { ordre: number; slot1: number; slot2: number }[] {
   const pairs: { ordre: number; slot1: number; slot2: number }[] = []
+
+  if (phaseType === 'match_simple') {
+    return [{ ordre: 1, slot1: 1, slot2: 2 }]
+  }
+
+  if (phaseType === 'americano') {
+    const schedule = generateAmericanoSchedule(inputCount, roundCount ?? 3)
+    let ordre = 1
+    for (const round of schedule) {
+      for (const [slot1, slot2] of round) {
+        pairs.push({ ordre, slot1, slot2 })
+        ordre++
+      }
+    }
+    return pairs
+  }
 
   if (phaseType === 'round_robin') {
     const schedule = circleSchedule(inputCount)
@@ -608,7 +718,11 @@ export function generateAllMatches(
         ? generateRoundRobinMatches(node, provenances, isRoot, tournamentId)
         : type === 'tournante_libre'
           ? generateTournantreLibreMatches(node, tournamentId)
-          : generateEliminationMatches(node, provenances, isRoot, tournamentId)
+          : type === 'match_simple'
+            ? generateMatchSimpleMatches(node, provenances, isRoot, tournamentId)
+            : type === 'americano'
+              ? generateAmericanoMatches(node, provenances, isRoot, tournamentId)
+              : generateEliminationMatches(node, provenances, isRoot, tournamentId)
 
     allMatches.push(...matches)
   }

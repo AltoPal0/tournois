@@ -1,4 +1,4 @@
-export type PhaseType = 'round_robin' | 'elimination' | 'super_americana' | 'tournante_libre'
+export type PhaseType = 'round_robin' | 'elimination' | 'super_americana' | 'tournante_libre' | 'match_simple' | 'americano'
 
 export interface PhaseOutput {
   id: string

@@ -26,6 +26,18 @@ const phaseTypes: { type: PhaseType; label: string; description: string; color: 
     description: 'Suisse simplifié',
     color: 'border-violet-200 bg-violet-50 text-violet-700',
   },
+  {
+    type: 'match_simple',
+    label: 'Match simple',
+    description: 'Un seul match',
+    color: 'border-rose-200 bg-rose-50 text-rose-700',
+  },
+  {
+    type: 'americano',
+    label: 'Américano',
+    description: 'Rotation sans doublons',
+    color: 'border-amber-200 bg-amber-50 text-amber-700',
+  },
 ]
 
 export default function Sidebar({ onOpenConfig }: { onOpenConfig?: () => void }) {

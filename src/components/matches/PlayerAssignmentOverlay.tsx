@@ -45,9 +45,9 @@ function buildInitialSlots(
   )
 
   for (const node of rootNodes) {
-    const { type, inputCount } = node.data.config
-    const pairType = type === 'elimination' ? 'elimination' : 'round_robin'
-    const pairs = computeInputSlotPairs(pairType, inputCount)
+    const { type, inputCount, roundCount } = node.data.config
+    const pairType = type === 'elimination' ? 'elimination' : type === 'americano' ? 'americano' : 'round_robin'
+    const pairs = computeInputSlotPairs(pairType, inputCount, roundCount)
     const phaseMatches = matches.filter((m) => m.phase_node_id === node.id)
 
     const slotTeamMap = new Map<number, string | null>()

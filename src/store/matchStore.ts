@@ -194,7 +194,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       const slotToTeam = new Map<number, string>()
       phaseTeams.forEach((t, i) => slotToTeam.set(i + 1, t.id))
 
-      const slotPairs = computeInputSlotPairs(type, inputCount)
+      const slotPairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
       const phaseMatches = matches
         .filter((m) => m.phase_node_id === node.id)
         .sort((a, b) => a.ordre - b.ordre)
@@ -331,7 +331,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     if (!node || node.data.config.type === 'super_americana') return
 
     const { type, inputCount } = node.data.config
-    const pairs = computeInputSlotPairs(type, inputCount)
+    const pairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
     const { matches } = get()
     const phaseMatches = matches.filter((m) => m.phase_node_id === phaseNodeId)
 

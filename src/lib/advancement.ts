@@ -31,10 +31,12 @@ export function computeAdvancements(
   const config = node.data.config
   const phaseMatches = allMatches.filter((m) => m.phase_node_id === phaseNodeId)
 
-  if (config.type === 'round_robin' || config.type === 'tournante_libre') {
+  if (config.type === 'round_robin' || config.type === 'tournante_libre' || config.type === 'americano') {
     advanceFromRoundRobin(phaseMatches, node, allMatches, updates)
   } else if (config.type === 'elimination') {
     advanceFromElimination(completedMatch, phaseMatches, node, allMatches, updates)
+  } else if (config.type === 'match_simple') {
+    advanceFromMatchSimple(completedMatch, node, allMatches, updates)
   }
 
   return updates
@@ -116,6 +118,38 @@ function advanceFromElimination(
       for (const target of targets) {
         updates.push({ matchId: target.matchId, field: target.field, teamId })
       }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Match simple : avancement immédiat après le seul match
+// ---------------------------------------------------------------------------
+
+function advanceFromMatchSimple(
+  completedMatch: Match,
+  node: TournamentGraph['nodes'][number],
+  allMatches: Match[],
+  updates: AdvancementUpdate[],
+) {
+  const winnerId =
+    completedMatch.score_equipe1! > completedMatch.score_equipe2!
+      ? completedMatch.equipe1_id!
+      : completedMatch.equipe2_id!
+  const loserId =
+    completedMatch.score_equipe1! > completedMatch.score_equipe2!
+      ? completedMatch.equipe2_id!
+      : completedMatch.equipe1_id!
+
+  const config = node.data.config
+  for (const output of config.outputs) {
+    const teamId = output.rank === 1 ? winnerId : output.rank === 2 ? loserId : null
+    if (!teamId) continue
+
+    const label = `${output.label} de ${config.name}`
+    const targets = findMatchesByLabel(label, allMatches)
+    for (const target of targets) {
+      updates.push({ matchId: target.matchId, field: target.field, teamId })
     }
   }
 }

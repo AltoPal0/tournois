@@ -7,6 +7,8 @@ const phaseTypeOptions: { value: PhaseType; label: string }[] = [
   { value: 'elimination', label: 'Tableau (Élimination)' },
   { value: 'super_americana', label: 'Super Americana' },
   { value: 'tournante_libre', label: 'Tournante libre (Suisse)' },
+  { value: 'match_simple', label: 'Match simple' },
+  { value: 'americano', label: 'Américano' },
 ]
 
 export default function PhaseConfigPanel() {
@@ -109,8 +111,8 @@ function PanelContent({
         </select>
       </div>
 
-      {/* Nombre de rounds (tournante_libre uniquement) */}
-      {config.type === 'tournante_libre' && (
+      {/* Nombre de rounds (tournante_libre et americano) */}
+      {(config.type === 'tournante_libre' || config.type === 'americano') && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Nombre de rounds</label>
           <input
@@ -204,26 +206,28 @@ function PanelContent({
         </div>
       </div>
 
-      {/* Input count */}
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">
-          Nombre d'équipes (entrées)
-        </label>
-        <input
-          type="number"
-          min={2}
-          max={32}
-          value={config.inputCount}
-          onChange={(e) =>
-            updatePhaseConfig(nodeId, {
-              inputCount: Math.max(2, Math.min(32, parseInt(e.target.value) || 2)),
-            })
-          }
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-            transition-shadow duration-150"
-        />
-      </div>
+      {/* Input count (caché pour match_simple, toujours 2) */}
+      {config.type !== 'match_simple' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Nombre d'équipes (entrées)
+          </label>
+          <input
+            type="number"
+            min={2}
+            max={32}
+            value={config.inputCount}
+            onChange={(e) =>
+              updatePhaseConfig(nodeId, {
+                inputCount: Math.max(2, Math.min(32, parseInt(e.target.value) || 2)),
+              })
+            }
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+              transition-shadow duration-150"
+          />
+        </div>
+      )}
 
       {/* Outputs */}
       <div>

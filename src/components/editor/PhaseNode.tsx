@@ -27,6 +27,18 @@ const typeStyles = {
     selectedRing: 'ring-violet-500',
     label: 'Tournante',
   },
+  match_simple: {
+    badge: 'bg-rose-100 text-rose-700',
+    border: 'border-rose-200',
+    selectedRing: 'ring-rose-500',
+    label: 'Match',
+  },
+  americano: {
+    badge: 'bg-amber-100 text-amber-700',
+    border: 'border-amber-200',
+    selectedRing: 'ring-amber-500',
+    label: 'Américano',
+  },
 }
 
 function PhaseNode({ id, data, selected }: NodeProps<Node<PhaseNodeData>>) {
