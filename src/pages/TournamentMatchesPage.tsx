@@ -56,9 +56,22 @@ export default function TournamentMatchesPage() {
   }, [id, loadTournament, loadMatches, subscribeToMatches, resetMatches, resetTournament])
 
   const fetchTeams = useCallback(async () => {
+    if (!id) return
+    // Récupérer uniquement les équipes assignées aux matchs de ce tournoi
+    const { data: matchData } = await supabase
+      .from('tt_matches')
+      .select('equipe1_id, equipe2_id')
+      .eq('tournament_id', id)
+    const teamIds = new Set<string>()
+    for (const m of (matchData ?? [])) {
+      if (m.equipe1_id) teamIds.add(m.equipe1_id)
+      if (m.equipe2_id) teamIds.add(m.equipe2_id)
+    }
+    if (teamIds.size === 0) return
     const { data } = await supabase
       .from('tt_teams')
       .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
+      .in('id', [...teamIds])
     if (data) {
       const map = new Map<string, TeamWithJoueurs>()
       for (const t of data as unknown as TeamWithJoueurs[]) {
@@ -66,7 +79,7 @@ export default function TournamentMatchesPage() {
       }
       setTeamsMap(map)
     }
-  }, [])
+  }, [id])
 
   useEffect(() => {
     fetchTeams()

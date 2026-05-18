@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Match, TournamentGraph } from '../types/tournament'
 import { supabase } from '../lib/supabase'
 import { generateAllMatches, computeInputSlotPairs } from '../lib/matchGeneration'
-import { computeAdvancements } from '../lib/advancement'
+import { computeAdvancements, computeAdvancementResets } from '../lib/advancement'
 import { computeNextRoundPairings } from '../lib/swissPairing'
 import { useTournamentStore } from './tournamentStore'
 
@@ -323,6 +323,36 @@ export const useMatchStore = create<MatchState>((set, get) => ({
           : m,
       ),
     }))
+
+    // Nullifier les équipes déjà avancées downstream depuis cette phase
+    const { nodes, edges } = useTournamentStore.getState()
+    const graph: TournamentGraph = {
+      nodes: nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
+      edges: edges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        sourceHandle: e.sourceHandle!,
+        target: e.target,
+        targetHandle: e.targetHandle!,
+      })),
+    }
+    const resets = computeAdvancementResets(matchId, get().matches, graph)
+    if (resets.length > 0) {
+      for (const r of resets) {
+        await supabase.from('tt_matches').update({ [r.field]: null }).eq('id', r.matchId)
+      }
+      set((state) => ({
+        matches: state.matches.map((m) => {
+          const matchResets = resets.filter((r) => r.matchId === m.id)
+          if (matchResets.length === 0) return m
+          const patched = { ...m }
+          for (const r of matchResets) {
+            ;(patched as Record<string, unknown>)[r.field] = null
+          }
+          return patched
+        }),
+      }))
+    }
   },
 
   assignTeamToPhaseSlot: async (tournamentId, phaseNodeId, slot, teamId) => {

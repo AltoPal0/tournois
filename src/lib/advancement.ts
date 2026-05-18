@@ -164,12 +164,85 @@ function findMatchesByLabel(
 ): { matchId: string; field: 'equipe1_id' | 'equipe2_id' }[] {
   const results: { matchId: string; field: 'equipe1_id' | 'equipe2_id' }[] = []
   for (const m of matches) {
-    if (m.equipe1_label === label && !m.equipe1_id) {
+    if (m.equipe1_label === label) {
       results.push({ matchId: m.id, field: 'equipe1_id' })
     }
-    if (m.equipe2_label === label && !m.equipe2_id) {
+    if (m.equipe2_label === label) {
       results.push({ matchId: m.id, field: 'equipe2_id' })
     }
   }
+  return results
+}
+
+// ---------------------------------------------------------------------------
+// Resets : nullifier les slots downstream déjà remplis depuis une phase
+// Utilisé par clearMatchScore pour nettoyer les avancements obsolètes.
+// ---------------------------------------------------------------------------
+
+export function computeAdvancementResets(
+  matchId: string,
+  allMatches: Match[],
+  graph: TournamentGraph,
+): { matchId: string; field: 'equipe1_id' | 'equipe2_id' }[] {
+  const results: { matchId: string; field: 'equipe1_id' | 'equipe2_id' }[] = []
+
+  const match = allMatches.find((m) => m.id === matchId)
+  if (!match) return results
+
+  const node = graph.nodes.find((n) => n.id === match.phase_node_id)
+  if (!node) return results
+
+  const config = node.data.config
+
+  if (
+    config.type === 'round_robin' ||
+    config.type === 'americano' ||
+    config.type === 'tournante_libre' ||
+    config.type === 'match_simple'
+  ) {
+    // Cherche les slots cross-phase remplis via les output labels de cette phase
+    for (const output of config.outputs) {
+      const label = `${output.label} de ${config.name}`
+      for (const m of allMatches) {
+        if (m.equipe1_label === label && m.equipe1_id) {
+          results.push({ matchId: m.id, field: 'equipe1_id' })
+        }
+        if (m.equipe2_label === label && m.equipe2_id) {
+          results.push({ matchId: m.id, field: 'equipe2_id' })
+        }
+      }
+    }
+  } else if (config.type === 'elimination') {
+    const phaseMatches = allMatches.filter((m) => m.phase_node_id === match.phase_node_id)
+
+    // Avancement interne : le slot rempli via "Vainqueur {match.nom}"
+    const winnerLabel = `Vainqueur ${match.nom}`
+    for (const m of phaseMatches) {
+      if (m.equipe1_label === winnerLabel && m.equipe1_id) {
+        results.push({ matchId: m.id, field: 'equipe1_id' })
+      }
+      if (m.equipe2_label === winnerLabel && m.equipe2_id) {
+        results.push({ matchId: m.id, field: 'equipe2_id' })
+      }
+    }
+
+    // Avancement externe : si c'était la finale, cherche les slots cross-phase
+    const maxRound = Math.max(...phaseMatches.map((m) => m.round ?? 0))
+    const finalMatches = phaseMatches.filter((m) => m.round === maxRound)
+    if (finalMatches.length === 1 && match.id === finalMatches[0].id) {
+      for (const output of config.outputs) {
+        const label = `${output.label} de ${config.name}`
+        for (const m of allMatches) {
+          if (m.equipe1_label === label && m.equipe1_id) {
+            results.push({ matchId: m.id, field: 'equipe1_id' })
+          }
+          if (m.equipe2_label === label && m.equipe2_id) {
+            results.push({ matchId: m.id, field: 'equipe2_id' })
+          }
+        }
+      }
+    }
+  }
+
   return results
 }

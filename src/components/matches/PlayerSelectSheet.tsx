@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import type { TeamWithJoueurs } from '../../types/tournament'
 import type { PlayerIdentity } from '../../hooks/usePlayerIdentity'
 
@@ -23,6 +23,26 @@ export default function PlayerSelectSheet({
     currentIdentity?.joueurId ?? null,
   )
   const [search, setSearch] = useState('')
+  const [keyboardOffset, setKeyboardOffset] = useState(0)
+
+  // Remonte la feuille quand le clavier apparaît (iOS ne resize pas le viewport)
+  useEffect(() => {
+    if (!isOpen) { setKeyboardOffset(0); return }
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => {
+      const offset = window.innerHeight - vv.height - vv.offsetTop
+      setKeyboardOffset(Math.max(0, offset))
+    }
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    update()
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+      setKeyboardOffset(0)
+    }
+  }, [isOpen])
 
   const players = useMemo(() => {
     const seen = new Set<string>()
@@ -69,10 +89,11 @@ export default function PlayerSelectSheet({
 
       {/* Sheet */}
       <div
-        className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl
+        className={`fixed left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl
           flex flex-col max-h-[85svh]
-          transition-transform duration-300 ease-out
+          transition-[transform,bottom] duration-300 ease-out
           ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
+        style={{ bottom: keyboardOffset }}
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1 shrink-0">
