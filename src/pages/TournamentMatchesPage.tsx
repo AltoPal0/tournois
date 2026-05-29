@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useCallback, useState } from 'react'
-import { useParams, Link } from 'react-router'
+import { useParams, Link, useNavigate } from 'react-router'
 import { useMatchStore } from '../store/matchStore'
 import { useTournamentStore } from '../store/tournamentStore'
 import { supabase } from '../lib/supabase'
@@ -12,9 +12,12 @@ import NextMatchBanner from '../components/matches/NextMatchBanner'
 import { topologicalSort } from '../lib/matchGeneration'
 import { usePlayerIdentity } from '../hooks/usePlayerIdentity'
 import { usePullToRefresh, PULL_THRESHOLD } from '../hooks/usePullToRefresh'
+import { useMatchNotifications } from '../hooks/useMatchNotifications'
+import { useFontSize } from '../hooks/useFontSize'
 
 export default function TournamentMatchesPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const matches = useMatchStore((s) => s.matches)
   const isLoading = useMatchStore((s) => s.isLoading)
   const isGenerating = useMatchStore((s) => s.isGenerating)
@@ -42,6 +45,10 @@ export default function TournamentMatchesPage() {
   const [showAllMatches, setShowAllMatches] = useState(false)
 
   const { identity, setIdentity, clearIdentity, findMyTeam } = usePlayerIdentity(id ?? '')
+
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'denied',
+  )
 
   useEffect(() => {
     if (!id) return
@@ -189,6 +196,11 @@ export default function TournamentMatchesPage() {
   const myTeam = findMyTeam(Array.from(teamsMap.values()))
   const myTeamId = myTeam?.id ?? null
 
+  // Notifications navigateur pour les convocations
+  useMatchNotifications(myTeamId, matches)
+
+  const { step: fontStep, maxStep: fontMaxStep, increase: fontIncrease, decrease: fontDecrease } = useFontSize()
+
   // La phase active contient-elle des matchs du joueur ?
   const phaseHasMyMatches = myTeamId
     ? activePhaseMatches.some((m) => m.equipe1_id === myTeamId || m.equipe2_id === myTeamId)
@@ -228,19 +240,8 @@ export default function TournamentMatchesPage() {
         className="bg-navy-900 shrink-0"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-      <div className="h-14 flex items-center px-3 sm:px-4 gap-2 sm:gap-4">
-        <Link
-          to="/"
-          className="text-white/70 hover:text-white transition-colors duration-150
-            flex items-center gap-1 shrink-0 p-1"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-          </svg>
-          <span className="hidden sm:inline text-sm font-medium">Accueil</span>
-        </Link>
-
-        <div className="flex-1 flex justify-center items-center gap-2 min-w-0">
+      <div className="h-12 flex items-center px-3 sm:px-4 gap-2">
+        <div className="flex-1 flex items-center gap-2 min-w-0">
           <span className="text-sm font-bold text-white truncate">{tournamentName}</span>
           {isActive && (
             <span className="shrink-0 text-xs font-bold text-padel-gold bg-padel-gold/15 border border-padel-gold/25 px-2 py-0.5 rounded-full">
@@ -248,6 +249,43 @@ export default function TournamentMatchesPage() {
             </span>
           )}
         </div>
+
+        {/* Bouton Queue — mode flottant actif */}
+        {isActive && tournamentConfig.floatingSchedule && (
+          <button
+            onClick={() => navigate(`/tournament/${id}/queue`)}
+            className="shrink-0 inline-flex items-center gap-1.5
+              h-8 px-2.5 rounded-xl text-xs font-bold
+              transition-all duration-200 active:scale-[0.98]
+              bg-padel-blue/20 border border-padel-blue/30 text-padel-blue hover:bg-padel-blue/30"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+            </svg>
+            Queue
+          </button>
+        )}
+
+        {/* Icône joueur */}
+        <button
+          onClick={() => setIsPlayerSheetOpen(true)}
+          className="shrink-0 transition-transform duration-150 active:scale-90"
+          aria-label="Mon profil"
+        >
+          {identity ? (
+            <div className="h-7 w-7 rounded-full bg-padel-gold flex items-center justify-center">
+              <span className="text-navy-900 text-xs font-black leading-none">
+                {identity.prenom.slice(0, 2).toUpperCase()}
+              </span>
+            </div>
+          ) : (
+            <div className="h-7 w-7 rounded-full bg-white/10 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white/60" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+              </svg>
+            </div>
+          )}
+        </button>
 
         {/* Boutons brouillon */}
         {isDraft && matches.length > 0 && (
@@ -303,9 +341,26 @@ export default function TournamentMatchesPage() {
             phases={sortedPhases}
             activePhaseId={activePhaseId}
             onSelect={setActivePhaseId}
-            playerIdentity={identity}
-            onUserClick={() => setIsPlayerSheetOpen(true)}
           />
+        </div>
+      )}
+
+      {/* Bandeau activation notifications */}
+      {isActive && tournamentConfig.floatingSchedule && notifPermission === 'default' && (
+        <div className="shrink-0 bg-padel-blue/10 border-b border-padel-blue/20 px-4 py-2 flex items-center gap-3">
+          <span className="flex-1 text-xs text-padel-blue font-medium">
+            Activez les notifications pour être prévenu quand votre match est convoqué
+          </span>
+          <button
+            onClick={async () => {
+              const perm = await Notification.requestPermission()
+              setNotifPermission(perm)
+            }}
+            className="shrink-0 text-xs font-bold text-white bg-padel-blue px-3 py-1.5 rounded-lg
+              hover:bg-padel-blue-light transition-colors active:scale-[0.97]"
+          >
+            Activer
+          </button>
         </div>
       )}
 
@@ -464,6 +519,10 @@ export default function TournamentMatchesPage() {
         teamsMap={teamsMap}
         onSelect={setIdentity}
         onClear={clearIdentity}
+        fontStep={fontStep}
+        fontMaxStep={fontMaxStep}
+        onFontIncrease={fontIncrease}
+        onFontDecrease={fontDecrease}
       />
     </div>
   )

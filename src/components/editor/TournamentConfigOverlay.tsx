@@ -38,6 +38,8 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   const duplicateTournament = useTournamentStore((s) => s.duplicateTournament)
   const tournamentName = useTournamentStore((s) => s.tournamentName)
   const isSaving = useTournamentStore((s) => s.isSaving)
+  const nodes = useTournamentStore((s) => s.nodes)
+  const updatePhaseConfig = useTournamentStore((s) => s.updatePhaseConfig)
 
   const navigate = useNavigate()
 
@@ -284,6 +286,61 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
               </p>
             )}
           </div>
+
+          {/* Planning flottant — visible uniquement si des pistes sont configurées */}
+          {(tournamentConfig.pistes?.length ?? 0) > 0 && (
+            <div className="border-t border-gray-100 pt-3 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0 pr-4">
+                  <span className="text-sm font-medium text-gray-700">Planning flottant</span>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Les pistes se libèrent au fil des scores — seule l'heure de début compte
+                  </p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={!!tournamentConfig.floatingSchedule}
+                  onClick={() => {
+                    const next = !tournamentConfig.floatingSchedule
+                    if (next) {
+                      // Effacer le timing sur toutes les phases
+                      for (const n of nodes) {
+                        updatePhaseConfig(n.id, { heureDebut: undefined, dureeMatch: undefined, reposMatch: undefined })
+                      }
+                    }
+                    update({
+                      floatingSchedule: next,
+                      heureDebutFlottant: next ? tournamentConfig.heureDebutFlottant : undefined,
+                    })
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0
+                    ${tournamentConfig.floatingSchedule ? 'bg-padel-blue' : 'bg-gray-200'}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200
+                      ${tournamentConfig.floatingSchedule ? 'translate-x-6' : 'translate-x-1'}`}
+                  />
+                </button>
+              </div>
+
+              {/* Heure de début des premiers matchs */}
+              {tournamentConfig.floatingSchedule && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Heure de début des premiers matchs
+                  </label>
+                  <input
+                    type="time"
+                    value={tournamentConfig.heureDebutFlottant ?? ''}
+                    onChange={(e) => update({ heureDebutFlottant: e.target.value || undefined })}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                      focus:outline-none focus:ring-2 focus:ring-padel-blue focus:border-transparent
+                      transition-shadow duration-150"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Joueurs inscrits */}
           <div className="border-t border-gray-100 pt-4">

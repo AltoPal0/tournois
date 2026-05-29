@@ -1,4 +1,3 @@
-import type { PlayerIdentity } from '../../hooks/usePlayerIdentity'
 
 interface Phase {
   id: string
@@ -9,17 +8,9 @@ interface PhaseNavProps {
   phases: Phase[]
   activePhaseId: string | null
   onSelect: (id: string) => void
-  playerIdentity?: PlayerIdentity | null
-  onUserClick?: () => void
 }
 
-export default function PhaseNav({
-  phases,
-  activePhaseId,
-  onSelect,
-  playerIdentity,
-  onUserClick,
-}: PhaseNavProps) {
+export default function PhaseNav({ phases, activePhaseId, onSelect }: PhaseNavProps) {
   const activeIndex = phases.findIndex((p) => p.id === activePhaseId)
 
   const goPrev = () => {
@@ -29,8 +20,6 @@ export default function PhaseNav({
   const goNext = () => {
     if (activeIndex < phases.length - 1) onSelect(phases[activeIndex + 1].id)
   }
-
-  const initials = playerIdentity ? playerIdentity.prenom.slice(0, 2).toUpperCase() : null
 
   return (
     <div className="flex items-center bg-navy-800 px-2 py-1.5">
@@ -81,27 +70,6 @@ export default function PhaseNav({
         </svg>
       </button>
 
-      {/* Séparateur vertical */}
-      <div className="w-px h-5 bg-white/10 mx-1.5 shrink-0" />
-
-      {/* Icône utilisateur */}
-      <button
-        onClick={onUserClick}
-        className="shrink-0 transition-transform duration-150 active:scale-90"
-        aria-label="Mon profil"
-      >
-        {initials ? (
-          <div className="h-7 w-7 rounded-full bg-padel-gold flex items-center justify-center">
-            <span className="text-navy-900 text-xs font-black leading-none">{initials}</span>
-          </div>
-        ) : (
-          <div className="h-7 w-7 rounded-full bg-white/10 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white/60" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-            </svg>
-          </div>
-        )}
-      </button>
     </div>
   )
 }

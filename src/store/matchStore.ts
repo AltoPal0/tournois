@@ -5,6 +5,7 @@ import { generateAllMatches, computeInputSlotPairs } from '../lib/matchGeneratio
 import { computeAdvancements, computeAdvancementResets } from '../lib/advancement'
 import { computeNextRoundPairings } from '../lib/swissPairing'
 import { useTournamentStore } from './tournamentStore'
+import { findNextMatchForCourt, computeEstimatedHoraire } from '../lib/courtAssignment'
 
 interface MatchState {
   matches: Match[]
@@ -309,6 +310,22 @@ export const useMatchStore = create<MatchState>((set, get) => ({
         }
       }
     }
+
+    // Planning flottant : libérer la piste et convoquer le match suivant
+    const { tournamentConfig } = useTournamentStore.getState()
+    if (tournamentConfig.floatingSchedule) {
+      const finishedMatch = get().matches.find((m) => m.id === matchId)
+      const piste = finishedMatch?.piste ?? null
+      if (piste != null) {
+        const nextMatch = findNextMatchForCourt(piste, get().matches, graph)
+        if (nextMatch) {
+          await Promise.all([
+            get().updateMatchPiste(nextMatch.id, piste),
+            get().updateMatchHoraire(nextMatch.id, computeEstimatedHoraire(0)),
+          ])
+        }
+      }
+    }
   },
 
   clearMatchScore: async (matchId) => {
@@ -441,6 +458,48 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   activateTournament: async (tournamentId) => {
     await supabase.from('tt_tournaments').update({ status: 'active' }).eq('id', tournamentId)
     useTournamentStore.getState().setTournamentStatus('active')
+
+    // Planning flottant : assigner les premiers N matchs prêts aux N pistes
+    const { tournamentConfig, nodes, edges } = useTournamentStore.getState()
+    if (tournamentConfig.floatingSchedule) {
+      const pistes = tournamentConfig.pistes ?? []
+      if (pistes.length > 0) {
+        const graph: TournamentGraph = {
+          nodes: nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
+          edges: edges.map((e) => ({
+            id: e.id,
+            source: e.source,
+            sourceHandle: e.sourceHandle!,
+            target: e.target,
+            targetHandle: e.targetHandle!,
+          })),
+        }
+        const { topologicalSort } = await import('../lib/matchGeneration')
+        const sorted = topologicalSort(graph)
+        const phaseOrder = new Map(sorted.map((n, i) => [n.id, i]))
+        const readyMatches = get().matches
+          .filter((m) => m.statut === 'a_jouer' && m.piste == null && m.equipe1_id && m.equipe2_id)
+          .sort((a, b) => {
+            const da = phaseOrder.get(a.phase_node_id) ?? 0
+            const db = phaseOrder.get(b.phase_node_id) ?? 0
+            return da !== db ? da - db : a.ordre - b.ordre
+          })
+          .slice(0, pistes.length)
+
+        // Heure de début : matchDate + heureDebutFlottant si renseignés, sinon maintenant
+        const startHoraire =
+          tournamentConfig.matchDate && tournamentConfig.heureDebutFlottant
+            ? `${tournamentConfig.matchDate}T${tournamentConfig.heureDebutFlottant}:00`
+            : computeEstimatedHoraire(0)
+
+        await Promise.all(
+          readyMatches.flatMap((m, i) => [
+            get().updateMatchPiste(m.id, pistes[i]),
+            get().updateMatchHoraire(m.id, startHoraire),
+          ]),
+        )
+      }
+    }
   },
 
   resetScores: async (tournamentId) => {
