@@ -87,9 +87,7 @@ function MatchCard({
           : 'cursor-default'}
         ${isMyMatch
           ? 'ring-2 ring-padel-gold/60 border-padel-gold/30'
-          : !hasScore && match.piste != null
-            ? 'border-padel-blue/30 ring-1 ring-padel-blue/20'
-            : 'border-gray-100'}
+          : 'border-gray-100'}
         shadow-[0_1px_3px_rgba(0,0,0,0.06)]
       `}
     >
@@ -113,19 +111,19 @@ function MatchCard({
           </div>
         </div>
 
-        {/* Zone droite : score si joué, sinon piste/horaire ou file d'attente */}
+        {/* Zone droite : score si joué, sinon piste/horaire en lecture seule */}
         <div className="shrink-0 flex flex-col items-end justify-center gap-0.5 min-w-[4rem]">
           {hasScore ? (
             <ScoreDisplay v1={match.score_equipe1!} v2={match.score_equipe2!} />
-          ) : match.piste != null ? (
-            <div className="flex flex-col items-end gap-0.5">
-              <span className="text-xs font-semibold text-padel-blue whitespace-nowrap">{pisteDisplay}</span>
-              {horaireDisplay && (
-                <span className="text-xs text-gray-400 whitespace-nowrap font-medium">{horaireDisplay}</span>
-              )}
-            </div>
           ) : (
-            <span className="text-xs text-gray-300 italic whitespace-nowrap">En attente</span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-xs text-gray-400 whitespace-nowrap font-medium">
+                {pisteDisplay ?? ''}
+              </span>
+              <span className="text-xs text-gray-400 whitespace-nowrap font-medium">
+                {horaireDisplay ?? ''}
+              </span>
+            </div>
           )}
         </div>
       </div>

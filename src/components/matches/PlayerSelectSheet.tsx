@@ -9,10 +9,6 @@ interface PlayerSelectSheetProps {
   teamsMap: Map<string, TeamWithJoueurs>
   onSelect: (joueur: { id: string; prenom: string }) => void
   onClear: () => void
-  fontStep?: number
-  fontMaxStep?: number
-  onFontIncrease?: () => void
-  onFontDecrease?: () => void
 }
 
 export default function PlayerSelectSheet({
@@ -22,10 +18,6 @@ export default function PlayerSelectSheet({
   teamsMap,
   onSelect,
   onClear,
-  fontStep = 1,
-  fontMaxStep = 4,
-  onFontIncrease,
-  onFontDecrease,
 }: PlayerSelectSheetProps) {
   const [selectedId, setSelectedId] = useState<string | null>(
     currentIdentity?.joueurId ?? null,
@@ -141,44 +133,6 @@ export default function PlayerSelectSheet({
             </button>
           </div>
         )}
-
-        {/* Taille de police */}
-        <div className="mx-5 mb-3 px-3 py-2.5 bg-gray-50 rounded-xl flex items-center justify-between shrink-0">
-          <span className="text-sm font-medium text-navy-900">Taille du texte</span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onFontDecrease}
-              disabled={fontStep <= 0}
-              aria-label="Réduire le texte"
-              className="h-8 w-8 rounded-full bg-white border border-gray-200 flex items-center justify-center
-                text-navy-900 font-bold text-base shadow-sm
-                disabled:opacity-30 disabled:cursor-not-allowed
-                active:scale-90 transition-all duration-150"
-            >
-              A<sup className="text-[9px] -ml-0.5">−</sup>
-            </button>
-            <div className="flex gap-1">
-              {Array.from({ length: fontMaxStep + 1 }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`rounded-full transition-all duration-150
-                    ${i === fontStep ? 'bg-padel-blue w-2 h-2' : 'bg-gray-300 w-1.5 h-1.5'}`}
-                />
-              ))}
-            </div>
-            <button
-              onClick={onFontIncrease}
-              disabled={fontStep >= fontMaxStep}
-              aria-label="Agrandir le texte"
-              className="h-8 w-8 rounded-full bg-white border border-gray-200 flex items-center justify-center
-                text-navy-900 font-bold text-base shadow-sm
-                disabled:opacity-30 disabled:cursor-not-allowed
-                active:scale-90 transition-all duration-150"
-            >
-              A<sup className="text-[9px] -ml-0.5">+</sup>
-            </button>
-          </div>
-        </div>
 
         {/* Recherche */}
         <div className="px-5 mb-3 shrink-0">

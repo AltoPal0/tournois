@@ -24,8 +24,6 @@ export interface TournamentConfig {
   imagePosition?: { x: number; y: number }
   pistes?: number[]
   joueursInscrits?: string[]
-  floatingSchedule?: boolean
-  heureDebutFlottant?: string
 }
 
 export interface PhaseNodeData extends Record<string, unknown> {

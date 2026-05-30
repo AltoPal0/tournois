@@ -18,7 +18,6 @@ export default function PhaseConfigPanel() {
   const updatePhaseConfig = useTournamentStore((s) => s.updatePhaseConfig)
   const deleteNode = useTournamentStore((s) => s.deleteNode)
   const duplicateNode = useTournamentStore((s) => s.duplicateNode)
-  const floatingSchedule = useTournamentStore((s) => s.tournamentConfig.floatingSchedule)
 
   const node = nodes.find((n) => n.id === selectedNodeId)
   const isOpen = !!node
@@ -35,7 +34,7 @@ export default function PhaseConfigPanel() {
         ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
       style={{ display: isOpen ? undefined : 'none' }}
     >
-      {node && <PanelContent key={node.id} nodeId={node.id} config={node.data.config} updatePhaseConfig={updatePhaseConfig} deleteNode={deleteNode} onDuplicate={handleDuplicate} floatingSchedule={!!floatingSchedule} />}
+      {node && <PanelContent key={node.id} nodeId={node.id} config={node.data.config} updatePhaseConfig={updatePhaseConfig} deleteNode={deleteNode} onDuplicate={handleDuplicate} />}
     </div>
   )
 }
@@ -46,14 +45,12 @@ function PanelContent({
   updatePhaseConfig,
   deleteNode,
   onDuplicate,
-  floatingSchedule,
 }: {
   nodeId: string
   config: PhaseConfig
   updatePhaseConfig: (nodeId: string, updates: Record<string, unknown>) => void
   deleteNode: (nodeId: string) => void
   onDuplicate: (nodeId: string) => void
-  floatingSchedule: boolean
 }) {
   function addOutput() {
     const newRank = config.outputs.length + 1
@@ -157,66 +154,57 @@ function PanelContent({
         </div>
       </div>
 
-      {/* Planification — masquée en mode flottant */}
-      {floatingSchedule ? (
-        <div className="px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-lg">
-          <p className="text-xs font-medium text-padel-blue">Planning flottant actif</p>
-          <p className="text-xs text-blue-400 mt-0.5">
-            La durée et les horaires sont gérés globalement — configurez l'heure de début dans les paramètres du tournoi.
-          </p>
+      {/* Planification */}
+      <div className="flex flex-col gap-3">
+        <label className="block text-xs font-medium text-gray-500">Planification</label>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Heure de début</label>
+          <input
+            type="time"
+            value={config.heureDebut ?? ''}
+            onChange={(e) => updatePhaseConfig(nodeId, { heureDebut: e.target.value || undefined })}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+              transition-shadow duration-150"
+          />
         </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <label className="block text-xs font-medium text-gray-500">Planification</label>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Heure de début</label>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="block text-xs text-gray-400 mb-1">Durée match (min)</label>
             <input
-              type="time"
-              value={config.heureDebut ?? ''}
-              onChange={(e) => updatePhaseConfig(nodeId, { heureDebut: e.target.value || undefined })}
+              type="number"
+              min={1}
+              value={config.dureeMatch ?? ''}
+              placeholder="ex: 75"
+              onChange={(e) =>
+                updatePhaseConfig(nodeId, {
+                  dureeMatch: e.target.value ? Math.max(1, parseInt(e.target.value) || 1) : undefined,
+                })
+              }
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
                 transition-shadow duration-150"
             />
           </div>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="block text-xs text-gray-400 mb-1">Durée match (min)</label>
-              <input
-                type="number"
-                min={1}
-                value={config.dureeMatch ?? ''}
-                placeholder="ex: 75"
-                onChange={(e) =>
-                  updatePhaseConfig(nodeId, {
-                    dureeMatch: e.target.value ? Math.max(1, parseInt(e.target.value) || 1) : undefined,
-                  })
-                }
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                  transition-shadow duration-150"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs text-gray-400 mb-1">Repos (min)</label>
-              <input
-                type="number"
-                min={0}
-                value={config.reposMatch ?? ''}
-                placeholder="ex: 15"
-                onChange={(e) =>
-                  updatePhaseConfig(nodeId, {
-                    reposMatch: e.target.value ? Math.max(0, parseInt(e.target.value) || 0) : undefined,
-                  })
-                }
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                  transition-shadow duration-150"
-              />
-            </div>
+          <div className="flex-1">
+            <label className="block text-xs text-gray-400 mb-1">Repos (min)</label>
+            <input
+              type="number"
+              min={0}
+              value={config.reposMatch ?? ''}
+              placeholder="ex: 15"
+              onChange={(e) =>
+                updatePhaseConfig(nodeId, {
+                  reposMatch: e.target.value ? Math.max(0, parseInt(e.target.value) || 0) : undefined,
+                })
+              }
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                transition-shadow duration-150"
+            />
           </div>
         </div>
-      )}
+      </div>
 
       {/* Input count (caché pour match_simple, toujours 2) */}
       {config.type !== 'match_simple' && (
