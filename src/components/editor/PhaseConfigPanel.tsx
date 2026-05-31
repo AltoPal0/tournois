@@ -168,41 +168,22 @@ function PanelContent({
               transition-shadow duration-150"
           />
         </div>
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label className="block text-xs text-gray-400 mb-1">Durée match (min)</label>
-            <input
-              type="number"
-              min={1}
-              value={config.dureeMatch ?? ''}
-              placeholder="ex: 75"
-              onChange={(e) =>
-                updatePhaseConfig(nodeId, {
-                  dureeMatch: e.target.value ? Math.max(1, parseInt(e.target.value) || 1) : undefined,
-                })
-              }
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
-                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                transition-shadow duration-150"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="block text-xs text-gray-400 mb-1">Repos (min)</label>
-            <input
-              type="number"
-              min={0}
-              value={config.reposMatch ?? ''}
-              placeholder="ex: 15"
-              onChange={(e) =>
-                updatePhaseConfig(nodeId, {
-                  reposMatch: e.target.value ? Math.max(0, parseInt(e.target.value) || 0) : undefined,
-                })
-              }
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
-                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                transition-shadow duration-150"
-            />
-          </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Durée d'un slot (min) — surcharge le global</label>
+          <input
+            type="number"
+            min={1}
+            value={config.dureeMatch ?? ''}
+            placeholder="Défaut du tournoi"
+            onChange={(e) =>
+              updatePhaseConfig(nodeId, {
+                dureeMatch: e.target.value ? Math.max(1, parseInt(e.target.value) || 1) : undefined,
+              })
+            }
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+              transition-shadow duration-150"
+          />
         </div>
       </div>
 

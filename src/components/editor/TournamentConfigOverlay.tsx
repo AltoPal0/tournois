@@ -222,42 +222,31 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
 
           {/* Toggle : même jour */}
           <div className="flex items-center justify-between py-3 border-t border-gray-100">
-            <span className="text-sm font-medium text-gray-700">
-              Tous les matchs le même jour
-            </span>
+            <span className="text-sm font-medium text-gray-700">Tous les matchs le même jour</span>
             <button
               role="switch"
               aria-checked={tournamentConfig.sameDay}
-              onClick={() =>
-                update({
-                  sameDay: !tournamentConfig.sameDay,
-                  matchDate: !tournamentConfig.sameDay ? tournamentConfig.matchDate : null,
-                })
-              }
+              onClick={() => update({ sameDay: !tournamentConfig.sameDay, matchDate: !tournamentConfig.sameDay ? tournamentConfig.matchDate : null })}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200
                 ${tournamentConfig.sameDay ? 'bg-blue-600' : 'bg-gray-200'}`}
             >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200
-                  ${tournamentConfig.sameDay ? 'translate-x-6' : 'translate-x-1'}`}
-              />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200
+                ${tournamentConfig.sameDay ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
 
-          {/* Date du tournoi (conditionnel) */}
-          {tournamentConfig.sameDay && (
-            <div className="-mt-3">
-              <label className="block text-xs font-medium text-gray-500 mb-1">Date du tournoi</label>
-              <input
-                type="date"
-                value={tournamentConfig.matchDate ?? ''}
-                onChange={(e) => update({ matchDate: e.target.value || null })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                  transition-shadow duration-150"
-              />
-            </div>
-          )}
+          {/* Date du tournoi — toujours visible */}
+          <div className="-mt-3">
+            <label className="block text-xs font-medium text-gray-500 mb-1">Date du tournoi</label>
+            <input
+              type="date"
+              value={tournamentConfig.matchDate ?? ''}
+              onChange={(e) => update({ matchDate: e.target.value || null, sameDay: !!e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                transition-shadow duration-150"
+            />
+          </div>
 
           {/* Pistes disponibles */}
           <div className="border-t border-gray-100 pt-4">
@@ -283,6 +272,41 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
                 Entrée invalide — ex : 1, 2, 3
               </p>
             )}
+          </div>
+
+          {/* Heure de début */}
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Heure de début
+            </label>
+            <input
+              type="time"
+              value={tournamentConfig.heureDebut ?? ''}
+              onChange={(e) => update({ heureDebut: e.target.value || undefined })}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                transition-shadow duration-150"
+            />
+          </div>
+
+          {/* Durée d'un slot */}
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Durée d'un slot (min)
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={tournamentConfig.dureeMatch ?? ''}
+              placeholder="Ex : 75"
+              onChange={(e) =>
+                update({ dureeMatch: e.target.value ? Math.max(1, parseInt(e.target.value) || 1) : undefined })
+              }
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                transition-shadow duration-150"
+            />
+            <p className="text-xs text-gray-400 mt-1">Peut être surchargé par phase</p>
           </div>
 
           {/* Joueurs inscrits */}

@@ -15,7 +15,6 @@ export interface PhaseConfig {
   roundCount?: number
   heureDebut?: string
   dureeMatch?: number
-  reposMatch?: number
 }
 
 export interface TournamentConfig {
@@ -23,6 +22,8 @@ export interface TournamentConfig {
   matchDate: string | null
   imagePosition?: { x: number; y: number }
   pistes?: number[]
+  heureDebut?: string
+  dureeMatch?: number
   joueursInscrits?: string[]
 }
 

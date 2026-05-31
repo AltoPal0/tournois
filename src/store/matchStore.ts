@@ -99,6 +99,8 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const newMatches = generateAllMatches(graph, tournamentId, {
       pistes: tournamentConfig?.pistes,
       matchDate: tournamentConfig?.matchDate,
+      heureDebut: tournamentConfig?.heureDebut,
+      dureeMatch: tournamentConfig?.dureeMatch,
     })
 
     if (newMatches.length > 0) {

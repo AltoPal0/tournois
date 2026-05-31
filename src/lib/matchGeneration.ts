@@ -602,6 +602,8 @@ function assignScheduleToMatches(
   graph: TournamentGraph,
   pistes: number[],
   matchDate: string | null,
+  globalDureeMatch?: number,
+  globalHeureDebut?: string,
 ): void {
   if (pistes.length === 0) return
 
@@ -618,20 +620,25 @@ function assignScheduleToMatches(
   }
 
   const P = pistes.length
+  const globalHeureDebutMin = globalHeureDebut ? timeToMinutes(globalHeureDebut) : null
+  let runningMin: number | null = null  // temps accumulé entre groupes de profondeur
 
   for (const [, nodeIds] of [...byDepth.entries()].sort(([a], [b]) => a - b)) {
-    // Paramètres de timing : collectés seulement si heureDebut + dureeMatch présents
+    // heureDebut : phase explicite, sinon temps cumulé, sinon global
     let heureDebutMin: number | null = null
-    let dureeMatch = 0
-    let reposMatch = 0
+    let dureeMatch = globalDureeMatch ?? 0
 
     for (const nodeId of nodeIds) {
       const config = nodeMap.get(nodeId)?.data.config as PhaseConfig | undefined
-      if (!config?.heureDebut || !config.dureeMatch) continue
-      const hm = timeToMinutes(config.heureDebut)
-      heureDebutMin = heureDebutMin === null ? hm : Math.min(heureDebutMin, hm)
-      dureeMatch = Math.max(dureeMatch, config.dureeMatch)
-      reposMatch = reposMatch === 0 ? (config.reposMatch ?? 0) : Math.min(reposMatch, config.reposMatch ?? 0)
+      if (config?.heureDebut) {
+        const hm = timeToMinutes(config.heureDebut)
+        heureDebutMin = heureDebutMin === null ? hm : Math.min(heureDebutMin, hm)
+      }
+      if (config?.dureeMatch) dureeMatch = Math.max(dureeMatch, config.dureeMatch)
+    }
+
+    if (heureDebutMin === null) {
+      heureDebutMin = runningMin ?? globalHeureDebutMin
     }
 
     const hasTimingConfig = heureDebutMin !== null && dureeMatch > 0
@@ -687,9 +694,11 @@ function assignScheduleToMatches(
 
       if (hasTimingConfig) {
         const batchCount = Math.ceil(interleaved.length / P)
-        currentMin += batchCount * dureeMatch + reposMatch
+        currentMin += batchCount * dureeMatch
       }
     }
+
+    if (hasTimingConfig) runningMin = currentMin
   }
 }
 
@@ -700,7 +709,7 @@ function assignScheduleToMatches(
 export function generateAllMatches(
   graph: TournamentGraph,
   tournamentId: string,
-  tournamentConfig?: { pistes?: number[]; matchDate?: string | null },
+  tournamentConfig?: { pistes?: number[]; matchDate?: string | null; dureeMatch?: number; heureDebut?: string },
 ): NewMatch[] {
   const sortedNodes = topologicalSort(graph)
   const provenanceMap = buildProvenanceMap(graph)
@@ -730,7 +739,7 @@ export function generateAllMatches(
   // Planification automatique si pistes configurées
   const pistes = tournamentConfig?.pistes ?? []
   if (pistes.length > 0) {
-    assignScheduleToMatches(allMatches, graph, pistes, tournamentConfig?.matchDate ?? null)
+    assignScheduleToMatches(allMatches, graph, pistes, tournamentConfig?.matchDate ?? null, tournamentConfig?.dureeMatch, tournamentConfig?.heureDebut)
   }
 
   return allMatches

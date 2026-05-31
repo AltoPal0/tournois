@@ -127,8 +127,9 @@ export default function CourtSchedulePage() {
   const slotDurMap: Record<string, number> = {}
   nodes.forEach((n) => {
     const cfg = n.data.config
-    matchDurMap[n.id] = cfg.dureeMatch ?? 60
-    slotDurMap[n.id] = (cfg.dureeMatch ?? 60) + (cfg.reposMatch ?? 0)
+    const dur = cfg.dureeMatch ?? tournamentConfig.dureeMatch ?? 60
+    matchDurMap[n.id] = dur
+    slotDurMap[n.id] = dur
   })
 
   // Construit la ligne d'équipes d'une carte

@@ -229,17 +229,6 @@ export default function TournamentMatchesPage() {
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
       <div className="h-14 flex items-center px-3 sm:px-4 gap-2 sm:gap-4">
-        <Link
-          to="/"
-          className="text-white/70 hover:text-white transition-colors duration-150
-            flex items-center gap-1 shrink-0 p-1"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-          </svg>
-          <span className="hidden sm:inline text-sm font-medium">Accueil</span>
-        </Link>
-
         <div className="flex-1 flex justify-center items-center gap-2 min-w-0">
           <span className="text-sm font-bold text-white truncate">{tournamentName}</span>
           {isActive && (
