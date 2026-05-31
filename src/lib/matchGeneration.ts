@@ -643,62 +643,113 @@ function assignScheduleToMatches(
 
     const hasTimingConfig = heureDebutMin !== null && dureeMatch > 0
 
-    // Grouper les matchs par (nodeId, round)
-    const matchesByNode = new Map<string, Map<number, NewMatch[]>>()
+    // Rounds indépendants (round_robin, americano) vs séquentiels (élimination…)
+    const freeRoundTypes = new Set(['round_robin', 'americano'])
+
+    // Index round → matchs par phase
+    const phaseRoundMap = new Map<string, Map<number, NewMatch[]>>()
+    const phaseTypeMap = new Map<string, string>()
     for (const nodeId of nodeIds) {
-      matchesByNode.set(nodeId, new Map())
+      phaseRoundMap.set(nodeId, new Map())
+      phaseTypeMap.set(nodeId, (nodeMap.get(nodeId)?.data.config as PhaseConfig | undefined)?.type ?? '')
     }
-    for (const match of allMatches) {
-      if (!nodeIds.includes(match.phase_node_id)) continue
-      const byRound = matchesByNode.get(match.phase_node_id)!
-      const r = match.round ?? 1
+    for (const m of allMatches) {
+      if (!nodeIds.includes(m.phase_node_id)) continue
+      const r = m.round ?? 1
+      const byRound = phaseRoundMap.get(m.phase_node_id)!
       if (!byRound.has(r)) byRound.set(r, [])
-      byRound.get(r)!.push(match)
+      byRound.get(r)!.push(m)
     }
 
-    // Nombre max de rounds dans ce groupe
-    let maxRound = 0
-    for (const byRound of matchesByNode.values()) {
-      for (const r of byRound.keys()) maxRound = Math.max(maxRound, r)
+    // Priorité : les phases avec plus de matchs passent en premier (remplissage optimal)
+    const phaseTotalMatches = new Map<string, number>()
+    for (const [nid, byRound] of phaseRoundMap) {
+      phaseTotalMatches.set(nid, [...byRound.values()].reduce((s, a) => s + a.length, 0))
     }
 
+    const sortByPriority = (arr: NewMatch[]) =>
+      arr.sort((a, b) => {
+        const pa = phaseTotalMatches.get(a.phase_node_id) ?? 0
+        const pb = phaseTotalMatches.get(b.phase_node_id) ?? 0
+        if (pa !== pb) return pb - pa
+        return (a.round ?? 1) - (b.round ?? 1) || a.ordre - b.ordre
+      })
+
+    // File de prêts : matchs planifiables maintenant
+    // - phases libres  → tous les rounds dès le départ
+    // - phases séquentielles → seulement le round 1 ; les suivants se débloquent
+    //   quand le round précédent est entièrement planifié
+    const scheduled = new Set<NewMatch>()
+    const phaseNextRound = new Map<string, number>()
+    let ready: NewMatch[] = []
+
+    for (const [nodeId, byRound] of phaseRoundMap) {
+      if (freeRoundTypes.has(phaseTypeMap.get(nodeId) ?? '')) {
+        for (const matches of byRound.values()) ready.push(...matches)
+      } else {
+        ready.push(...(byRound.get(1) ?? []))
+        if ([...byRound.keys()].some((r) => r > 1)) phaseNextRound.set(nodeId, 2)
+      }
+    }
+    sortByPriority(ready)
+
+    const batches: NewMatch[][] = []
+
+    while (ready.length > 0) {
+      const batch: NewMatch[] = []
+      const busyTeams = new Set<string>()
+      const deferred: NewMatch[] = []
+
+      for (const match of ready) {
+        const t1 = match.equipe1_id
+        const t2 = match.equipe2_id
+        if (batch.length < P && !(t1 && busyTeams.has(t1)) && !(t2 && busyTeams.has(t2))) {
+          batch.push(match)
+          if (t1) busyTeams.add(t1)
+          if (t2) busyTeams.add(t2)
+        } else {
+          deferred.push(match)
+        }
+      }
+
+      batches.push(batch)
+      for (const m of batch) scheduled.add(m)
+      ready = deferred
+
+      // Débloquer les rounds suivants des phases séquentielles dont le round courant est fini
+      for (const [nodeId, nextRound] of [...phaseNextRound.entries()]) {
+        const prevMatches = phaseRoundMap.get(nodeId)?.get(nextRound - 1) ?? []
+        if (prevMatches.length > 0 && prevMatches.every((m) => scheduled.has(m))) {
+          const nextMatches = phaseRoundMap.get(nodeId)?.get(nextRound) ?? []
+          ready.push(...nextMatches)
+          if (nextMatches.length > 0) {
+            phaseNextRound.set(nodeId, nextRound + 1)
+          } else {
+            phaseNextRound.delete(nodeId)
+          }
+        }
+      }
+
+      sortByPriority(ready)
+    }
+
+    // Assigner pistes et horaires
     let currentMin = heureDebutMin ?? 0
 
-    for (let r = 1; r <= maxRound; r++) {
-      // Interleaver les matchs de toutes les phases pour ce round
-      const matchesPerPhase: NewMatch[][] = nodeIds.map(
-        (nodeId) => matchesByNode.get(nodeId)?.get(r) ?? [],
-      )
-
-      const interleaved: NewMatch[] = []
-      const maxPerPhase = Math.max(...matchesPerPhase.map((m) => m.length))
-      for (let i = 0; i < maxPerPhase; i++) {
-        for (const phaseMatches of matchesPerPhase) {
-          if (i < phaseMatches.length) interleaved.push(phaseMatches[i])
-        }
-      }
-
-      if (interleaved.length === 0) continue
-
-      // Assigner courts (toujours) + horaires (seulement si timing configuré)
-      for (let i = 0; i < interleaved.length; i++) {
-        const courtIdx = i % P
-        interleaved[i].piste = pistes[courtIdx]
-
+    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+      const batch = batches[batchIdx]
+      for (let i = 0; i < batch.length; i++) {
+        batch[i].piste = pistes[i]
         if (hasTimingConfig && matchDate) {
-          const batch = Math.floor(i / P)
-          const startMin = currentMin + batch * dureeMatch
-          interleaved[i].horaire = `${matchDate}T${minutesToTimeString(startMin)}:00`
+          batch[i].horaire = `${matchDate}T${minutesToTimeString(currentMin + batchIdx * dureeMatch)}:00`
         }
-      }
-
-      if (hasTimingConfig) {
-        const batchCount = Math.ceil(interleaved.length / P)
-        currentMin += batchCount * dureeMatch
       }
     }
 
-    if (hasTimingConfig) runningMin = currentMin
+    if (hasTimingConfig) {
+      currentMin += batches.length * dureeMatch
+      runningMin = currentMin
+    }
   }
 }
 

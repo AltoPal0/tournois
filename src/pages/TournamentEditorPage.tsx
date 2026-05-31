@@ -110,7 +110,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
         {/* Top bar */}
         <div className="h-14 border-b border-gray-200 bg-white flex items-center px-4 gap-4 shrink-0">
           <Link
-            to="/"
+            to="/steph"
             className="text-sm text-gray-500 hover:text-gray-700 transition-colors duration-150
               flex items-center gap-1"
           >
