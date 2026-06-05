@@ -565,7 +565,7 @@ export default function PhaseSection({
       {type === 'americana_single' && individualStandings.length > 0 && (
         <div className="mb-4">
           <div className="overflow-x-auto rounded-xl border border-gray-100">
-            <table className="w-full text-xs">
+            <table className={`w-full ${fscale(fontScale, 'text-xs', 'text-sm', 'text-base')}`}>
               <thead>
                 <tr className="bg-gray-50 text-gray-400 uppercase tracking-wider">
                   <th className="px-3 py-2 text-left">#</th>
