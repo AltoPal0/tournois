@@ -55,7 +55,7 @@ export interface TournamentGraph {
   edges: SerializedEdge[]
 }
 
-export type TournamentStatus = 'draft' | 'active' | 'completed'
+export type TournamentStatus = 'draft' | 'configured' | 'active' | 'completed'
 
 export interface Tournament {
   id: string

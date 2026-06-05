@@ -7,12 +7,14 @@ interface Props {
 
 const STATUS_LABELS: Record<TournamentStatus, string> = {
   draft: 'Brouillon',
+  configured: 'Prêt à démarrer',
   active: 'En cours',
   completed: 'Terminé',
 }
 
 const STATUS_CLASSES: Record<TournamentStatus, string> = {
   draft: 'bg-gray-100 text-gray-500',
+  configured: 'bg-teal-100 text-teal-700',
   active: 'bg-blue-100 text-blue-700',
   completed: 'bg-green-100 text-green-700',
 }

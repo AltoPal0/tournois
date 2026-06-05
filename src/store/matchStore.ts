@@ -24,6 +24,7 @@ interface MatchState {
   clearMatchScore: (matchId: string) => Promise<void>
   updateMatchPiste: (matchId: string, piste: number | null) => Promise<void>
   updateMatchHoraire: (matchId: string, horaire: string | null) => Promise<void>
+  configureTournament: (tournamentId: string) => Promise<void>
   activateTournament: (tournamentId: string) => Promise<void>
   resetScores: (tournamentId: string) => Promise<void>
   clearMatches: (tournamentId: string) => Promise<void>
@@ -554,6 +555,11 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     set((state) => ({
       matches: state.matches.map((m) => (m.id === matchId ? { ...m, horaire } : m)),
     }))
+  },
+
+  configureTournament: async (tournamentId) => {
+    await supabase.from('tt_tournaments').update({ status: 'configured' }).eq('id', tournamentId)
+    useTournamentStore.getState().setTournamentStatus('configured')
   },
 
   activateTournament: async (tournamentId) => {

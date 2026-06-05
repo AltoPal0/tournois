@@ -30,6 +30,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   const generateMatches = useMatchStore((s) => s.generateMatches)
   const resetScores = useMatchStore((s) => s.resetScores)
   const clearMatches = useMatchStore((s) => s.clearMatches)
+  const configureTournament = useMatchStore((s) => s.configureTournament)
   const activateTournament = useMatchStore((s) => s.activateTournament)
   const isGenerating = useMatchStore((s) => s.isGenerating)
   const matches = useMatchStore((s) => s.matches)
@@ -38,6 +39,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   const [showConfigOverlay, setShowConfigOverlay] = useState(false)
   const [showActiveConfirm, setShowActiveConfirm] = useState(false)
   const [showPlayerOverlay, setShowPlayerOverlay] = useState(false)
+  const [isConfiguring, setIsConfiguring] = useState(false)
   const [isActivating, setIsActivating] = useState(false)
   const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
 
@@ -110,10 +112,13 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   const handleSave = useCallback(() => {
     if (tournamentStatus === 'active') {
       setShowActiveConfirm(true)
+    } else if (tournamentStatus === 'configured') {
+      setTournamentStatus('draft')
+      saveTournament()
     } else {
       saveTournament()
     }
-  }, [tournamentStatus, saveTournament])
+  }, [tournamentStatus, saveTournament, setTournamentStatus])
 
   const handleSaveActiveConfirmed = useCallback(async () => {
     if (!id) return
@@ -122,6 +127,13 @@ const isDirty = useTournamentStore((s) => s.isDirty)
     setTournamentStatus('draft')
     saveTournament()
   }, [id, resetScores, setTournamentStatus, saveTournament])
+
+  const handleConfigure = useCallback(async () => {
+    if (!id) return
+    setIsConfiguring(true)
+    await configureTournament(id)
+    setIsConfiguring(false)
+  }, [id, configureTournament])
 
   const handleDeleteTournament = useCallback(async () => {
     if (!id) return
@@ -245,6 +257,25 @@ const isDirty = useTournamentStore((s) => s.isDirty)
           )}
 
           {tournamentStatus === 'draft' && matches.length > 0 && allPlayersAssigned && (
+            <button
+              onClick={handleConfigure}
+              disabled={isConfiguring}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
+                transition-all duration-200 disabled:opacity-50
+                bg-teal-500 text-white hover:bg-teal-400 active:scale-[0.98]"
+            >
+              {isConfiguring ? (
+                <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
+                </svg>
+              )}
+              Partager avec les joueurs
+            </button>
+          )}
+
+          {tournamentStatus === 'configured' && (
             <button
               onClick={handleActivate}
               disabled={isActivating}
