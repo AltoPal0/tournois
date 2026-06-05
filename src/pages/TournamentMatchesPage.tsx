@@ -5,7 +5,6 @@ import { useTournamentStore } from '../store/tournamentStore'
 import { supabase } from '../lib/supabase'
 import type { TeamWithJoueurs, TournamentGraph, PhaseType, PlayerTemplate } from '../types/tournament'
 import PhaseSection from '../components/matches/PhaseSection'
-import PlayerAssignmentOverlay from '../components/matches/PlayerAssignmentOverlay'
 import PlayerSelectSheet from '../components/matches/PlayerSelectSheet'
 import NextMatchBanner from '../components/matches/NextMatchBanner'
 import OnboardingOverlay from '../components/matches/OnboardingOverlay'
@@ -35,7 +34,6 @@ export default function TournamentMatchesPage() {
 
   const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
-  const [isPlayerOverlayOpen, setIsPlayerOverlayOpen] = useState(false)
   const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false)
   const [isActivating, setIsActivating] = useState(false)
   const [isBurgerOpen, setIsBurgerOpen] = useState(false)
@@ -106,11 +104,6 @@ export default function TournamentMatchesPage() {
     }
   }, [isLoading, teamsLoaded, matches.length, teamsMap.size, id])
 
-  const handleAssignmentChanged = useCallback(async () => {
-    if (id) await loadMatches(id)
-    await fetchTeams()
-  }, [id, loadMatches, fetchTeams])
-
   // Rafraîchissement manuel (pull-to-refresh)
   const handleRefresh = useCallback(async () => {
     if (!id) return
@@ -174,19 +167,6 @@ export default function TournamentMatchesPage() {
       const required = requiredMatchesForType(node.data.config.type, phaseMatches)
       return required.length > 0 && required.every((m) => m.equipe1_id && m.equipe2_id)
     })
-  }, [matches, nodes, rootNodeIds])
-
-  const unassignedCount = useMemo(() => {
-    const rootNodes = nodes.filter((n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana')
-    let total = 0
-    let assigned = 0
-    for (const node of rootNodes) {
-      const phaseMatches = matches.filter((m) => m.phase_node_id === node.id)
-      const required = requiredMatchesForType(node.data.config.type, phaseMatches)
-      total += required.length * 2
-      assigned += required.filter((m) => m.equipe1_id).length + required.filter((m) => m.equipe2_id).length
-    }
-    return Math.max(0, total - assigned)
   }, [matches, nodes, rootNodeIds])
 
   const handleActivate = useCallback(async () => {
@@ -322,49 +302,25 @@ export default function TournamentMatchesPage() {
           )}
         </div>
 
-        {/* Boutons brouillon */}
-        {isDraft && matches.length > 0 && (
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setIsPlayerOverlayOpen(true)}
-              className="relative inline-flex items-center justify-center gap-1.5
-                h-8 px-2.5 rounded-lg text-xs font-semibold
-                transition-all duration-200 active:scale-[0.98]
-                bg-white/10 border border-white/10 text-white hover:bg-white/20"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white/70" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+        {/* Bouton Activer — brouillon avec tous les joueurs assignés */}
+        {isDraft && matches.length > 0 && allPlayersAssigned && (
+          <button
+            onClick={handleActivate}
+            disabled={isActivating}
+            className="inline-flex items-center justify-center gap-1.5
+              h-8 px-2.5 rounded-lg text-xs font-bold shrink-0
+              transition-all duration-200 active:scale-[0.98] disabled:opacity-50
+              bg-padel-gold text-navy-900 hover:bg-padel-gold-dark shadow-sm"
+          >
+            {isActivating ? (
+              <div className="h-3.5 w-3.5 border-2 border-navy-900/30 border-t-navy-900 rounded-full animate-spin" />
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
               </svg>
-              <span className="hidden sm:inline">Joueurs</span>
-              {unassignedCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 h-4 min-w-[1rem] px-1
-                  bg-red-500 text-white text-[10px] font-bold rounded-full
-                  flex items-center justify-center leading-none">
-                  {unassignedCount}
-                </span>
-              )}
-            </button>
-
-            {allPlayersAssigned && (
-              <button
-                onClick={handleActivate}
-                disabled={isActivating}
-                className="inline-flex items-center justify-center gap-1.5
-                  h-8 px-2.5 rounded-lg text-xs font-bold
-                  transition-all duration-200 active:scale-[0.98] disabled:opacity-50
-                  bg-padel-gold text-navy-900 hover:bg-padel-gold-dark shadow-sm"
-              >
-                {isActivating ? (
-                  <div className="h-3.5 w-3.5 border-2 border-navy-900/30 border-t-navy-900 rounded-full animate-spin" />
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                  </svg>
-                )}
-                <span className="hidden sm:inline">Activer</span>
-              </button>
             )}
-          </div>
+            <span className="hidden sm:inline">Activer</span>
+          </button>
         )}
 
         {/* Burger menu — navigation entre phases */}
@@ -519,6 +475,7 @@ export default function TournamentMatchesPage() {
           tournamentId={id}
           tournamentName={tournamentName ?? ''}
           teamsMap={teamsMap}
+          teamsLoaded={teamsLoaded}
           onComplete={(joueur) => {
             if (joueur) setIdentity(joueur)
             setShowOnboarding(false)
@@ -578,17 +535,6 @@ export default function TournamentMatchesPage() {
           </div>
         </div>
       )}
-
-      {/* Overlay assignation joueurs */}
-      <PlayerAssignmentOverlay
-        isOpen={isPlayerOverlayOpen}
-        onClose={() => setIsPlayerOverlayOpen(false)}
-        tournamentId={id ?? ''}
-        graph={graph}
-        matches={matches}
-        teamsMap={teamsMap}
-        onAssignmentChanged={handleAssignmentChanged}
-      />
 
       {/* Sheet identification joueur */}
       <PlayerSelectSheet

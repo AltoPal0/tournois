@@ -212,6 +212,7 @@ export default function PlayerAssignmentOverlay({
 }: Props) {
   const assignPlayersToSlot = useMatchStore((s) => s.assignPlayersToSlot)
   const assignRandomTeams = useMatchStore((s) => s.assignRandomTeams)
+  const seedRandomAssignments = useMatchStore((s) => s.seedRandomAssignments)
   const clearSlotAssignments = useMatchStore((s) => s.clearSlotAssignments)
   const isAssigning = useMatchStore((s) => s.isAssigning)
   const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
@@ -351,8 +352,6 @@ export default function PlayerAssignmentOverlay({
 
   const handleRandomAssign = useCallback(async () => {
     await assignRandomTeams(tournamentId, graph)
-    // Reconstruire l'état local depuis les données fraîches : les props du parent
-    // ne sont pas encore mises à jour à ce stade (useEffect [isOpen] ne se redéclenche pas).
     const { data } = await supabase
       .from('tt_teams')
       .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
@@ -366,6 +365,20 @@ export default function PlayerAssignmentOverlay({
     }
     onAssignmentChanged()
   }, [tournamentId, graph, assignRandomTeams, onAssignmentChanged])
+
+  const handleSeedRandom = useCallback(async () => {
+    await seedRandomAssignments(tournamentId, graph)
+    const { data } = await supabase
+      .from('tt_teams')
+      .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
+    if (data) {
+      const freshTeamsMap = new Map<string, TeamWithJoueurs>()
+      for (const t of data as unknown as TeamWithJoueurs[]) freshTeamsMap.set(t.id, t)
+      const freshMatches = useMatchStore.getState().matches
+      setSlotPlayers(buildInitialSlots(graph, freshMatches, freshTeamsMap))
+    }
+    onAssignmentChanged()
+  }, [tournamentId, graph, seedRandomAssignments, onAssignmentChanged])
 
   const handleJsonImport = useCallback(async () => {
     setJsonError(null)
@@ -515,11 +528,30 @@ export default function PlayerAssignmentOverlay({
         </button>
 
         <button
+          onClick={handleSeedRandom}
+          disabled={isAssigning}
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium
+            border border-gray-200 text-gray-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700
+            transition-all duration-200 disabled:opacity-40"
+          title="Mélanger les équipes déjà assignées dans les poules"
+        >
+          {isAssigning ? (
+            <div className="h-3 w-3 border-2 border-gray-400/30 border-t-gray-600 rounded-full animate-spin" />
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8zM12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 10-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" />
+            </svg>
+          )}
+          Seed aléatoire
+        </button>
+
+        <button
           onClick={handleRandomAssign}
           disabled={isAssigning}
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium
             border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300
             transition-all duration-200 disabled:opacity-40"
+          title="Créer de nouvelles équipes en appariant les joueurs aléatoirement"
         >
           {isAssigning ? (
             <div className="h-3 w-3 border-2 border-gray-400/30 border-t-gray-600 rounded-full animate-spin" />

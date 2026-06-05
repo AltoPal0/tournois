@@ -1,13 +1,15 @@
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router'
 import { ReactFlowProvider } from '@xyflow/react'
 import { useTournamentStore } from '../store/tournamentStore'
 import { useMatchStore } from '../store/matchStore'
 import { supabase } from '../lib/supabase'
+import type { TeamWithJoueurs, TournamentGraph } from '../types/tournament'
 import FlowCanvas from '../components/editor/FlowCanvas'
 import Sidebar from '../components/editor/Sidebar'
 import PhaseConfigPanel from '../components/editor/PhaseConfigPanel'
 import TournamentConfigOverlay from '../components/editor/TournamentConfigOverlay'
+import PlayerAssignmentOverlay from '../components/matches/PlayerAssignmentOverlay'
 
 export default function TournamentEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -34,8 +36,44 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   const [showConfirm, setShowConfirm] = useState(false)
   const [showConfigOverlay, setShowConfigOverlay] = useState(false)
   const [showActiveConfirm, setShowActiveConfirm] = useState(false)
+  const [showPlayerOverlay, setShowPlayerOverlay] = useState(false)
+  const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
 
   const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
+
+  const graph: TournamentGraph = useMemo(() => ({
+    nodes: nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
+    edges: edges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      sourceHandle: e.sourceHandle!,
+      target: e.target,
+      targetHandle: e.targetHandle!,
+    })),
+  }), [nodes, edges])
+
+  const fetchTeams = useCallback(async () => {
+    if (!id) return
+    const { data: matchData } = await supabase
+      .from('tt_matches')
+      .select('equipe1_id, equipe2_id')
+      .eq('tournament_id', id)
+    const teamIds = new Set<string>()
+    for (const m of (matchData ?? [])) {
+      if (m.equipe1_id) teamIds.add(m.equipe1_id)
+      if (m.equipe2_id) teamIds.add(m.equipe2_id)
+    }
+    if (teamIds.size === 0) { setTeamsMap(new Map()); return }
+    const { data } = await supabase
+      .from('tt_teams')
+      .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
+      .in('id', [...teamIds])
+    if (data) {
+      const map = new Map<string, TeamWithJoueurs>()
+      for (const t of data as unknown as TeamWithJoueurs[]) map.set(t.id, t)
+      setTeamsMap(map)
+    }
+  }, [id])
 
   const canViewSchedule =
     (tournamentConfig.pistes?.length ?? 0) > 0 &&
@@ -45,9 +83,10 @@ const isDirty = useTournamentStore((s) => s.isDirty)
     if (id) {
       loadTournament(id)
       loadMatches(id)
+      fetchTeams()
     }
     return () => reset()
-  }, [id, loadTournament, loadMatches, reset])
+  }, [id, loadTournament, loadMatches, fetchTeams, reset])
 
   const handleSave = useCallback(() => {
     if (tournamentStatus === 'active') {
@@ -234,6 +273,18 @@ const isDirty = useTournamentStore((s) => s.isDirty)
         isOpen={showConfigOverlay}
         onClose={() => setShowConfigOverlay(false)}
         onDeleteTournament={handleDeleteTournament}
+        onOpenPlayerAssignment={() => { setShowConfigOverlay(false); setShowPlayerOverlay(true) }}
+      />
+
+      {/* Overlay assignation joueurs */}
+      <PlayerAssignmentOverlay
+        isOpen={showPlayerOverlay}
+        onClose={() => setShowPlayerOverlay(false)}
+        tournamentId={id ?? ''}
+        graph={graph}
+        matches={matches}
+        teamsMap={teamsMap}
+        onAssignmentChanged={async () => { await loadMatches(id!); await fetchTeams() }}
       />
 
       {/* Modal : sauvegarde d'un tournoi actif */}

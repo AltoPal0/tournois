@@ -5,6 +5,7 @@ interface OnboardingOverlayProps {
   tournamentId: string
   tournamentName: string
   teamsMap: Map<string, TeamWithJoueurs>
+  teamsLoaded: boolean
   onComplete: (joueur?: { id: string; prenom: string }) => void
 }
 
@@ -97,8 +98,9 @@ function SlideWelcome({ tournamentName, onNext, onSkip }: {
 // ---------------------------------------------------------------------------
 // Slide 1 — Sélection joueur
 // ---------------------------------------------------------------------------
-function SlidePlayerSelect({ teamsMap, onSelect, onSkip }: {
+function SlidePlayerSelect({ teamsMap, teamsLoaded, onSelect, onSkip }: {
   teamsMap: Map<string, TeamWithJoueurs>
+  teamsLoaded: boolean
   onSelect: (joueur: { id: string; prenom: string }) => void
   onSkip: () => void
 }) {
@@ -166,9 +168,19 @@ function SlidePlayerSelect({ teamsMap, onSelect, onSkip }: {
 
       {/* Liste joueurs */}
       <div className="flex-1 overflow-y-auto space-y-1.5 min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {teamsMap.size === 0 ? (
+        {!teamsLoaded ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-5 w-5 border-2 border-white/20 border-t-[#D4E800] rounded-full animate-spin" />
+          </div>
+        ) : teamsMap.size === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
+            <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center">
+              <svg className="h-5 w-5 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+              </svg>
+            </div>
+            <p className="text-white/40 text-sm">Aucun joueur assigné pour l'instant.</p>
+            <p className="text-white/25 text-xs">L'organisateur doit d'abord assigner les équipes.</p>
           </div>
         ) : filtered.length === 0 ? (
           <p className="text-white/30 text-sm text-center py-8">Aucun joueur trouvé</p>
@@ -512,7 +524,7 @@ function SlideHomescreen({ onDone }: { onDone: () => void }) {
 // Composant principal
 // ---------------------------------------------------------------------------
 
-export default function OnboardingOverlay({ tournamentId, tournamentName, teamsMap, onComplete }: OnboardingOverlayProps) {
+export default function OnboardingOverlay({ tournamentId, tournamentName, teamsMap, teamsLoaded, onComplete }: OnboardingOverlayProps) {
   const [step, setStep] = useState<0 | 1 | 2>(0)
   const [selectedJoueur, setSelectedJoueur] = useState<{ id: string; prenom: string } | undefined>()
 
@@ -550,6 +562,7 @@ export default function OnboardingOverlay({ tournamentId, tournamentName, teamsM
         {step === 1 && (
           <SlidePlayerSelect
             teamsMap={teamsMap}
+            teamsLoaded={teamsLoaded}
             onSelect={joueur => {
               setSelectedJoueur(joueur)
               setStep(2)

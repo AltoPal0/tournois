@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { useTournamentStore } from '../../store/tournamentStore'
-import type { TournamentConfig, PlayerTemplate } from '../../types/tournament'
+import { useMatchStore } from '../../store/matchStore'
+import { supabase } from '../../lib/supabase'
+import type { TournamentConfig, PlayerTemplate, Joueur } from '../../types/tournament'
 
 // ---------------------------------------------------------------------------
 // Normalisation des URLs d'images (imgur gallery → lien direct)
@@ -27,9 +29,10 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   onDeleteTournament: () => Promise<void>
+  onOpenPlayerAssignment?: () => void
 }
 
-export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTournament }: Props) {
+export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTournament, onOpenPlayerAssignment }: Props) {
   const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
   const setTournamentConfig = useTournamentStore((s) => s.setTournamentConfig)
   const tournamentImageUrl = useTournamentStore((s) => s.tournamentImageUrl)
@@ -38,6 +41,11 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   const duplicateTournament = useTournamentStore((s) => s.duplicateTournament)
   const tournamentName = useTournamentStore((s) => s.tournamentName)
   const isSaving = useTournamentStore((s) => s.isSaving)
+  const tournamentId = useTournamentStore((s) => s.tournamentId)
+  const nodes = useTournamentStore((s) => s.nodes)
+  const edges = useTournamentStore((s) => s.edges)
+  const assignPlayersToSlot = useMatchStore((s) => s.assignPlayersToSlot)
+  const matchesLoaded = useMatchStore((s) => s.matches.length > 0)
 
   const navigate = useNavigate()
 
@@ -45,6 +53,10 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   const [rawPistes, setRawPistes] = useState('')
   const [pistesError, setPistesError] = useState(false)
   const [rawJoueurs, setRawJoueurs] = useState('')
+  const [showJsonImport, setShowJsonImport] = useState(false)
+  const [jsonImportText, setJsonImportText] = useState('')
+  const [jsonImportError, setJsonImportError] = useState<string | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showCopyModal, setShowCopyModal] = useState(false)
@@ -135,6 +147,83 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
     update({ joueursInscrits: names })
   }
 
+  async function handleJsonImport() {
+    if (!tournamentId) return
+    setJsonImportError(null)
+
+    let parsed: { teams: { player1: string; player2: string }[] }
+    try {
+      parsed = JSON.parse(jsonImportText)
+    } catch {
+      setJsonImportError('JSON invalide')
+      return
+    }
+    if (!Array.isArray(parsed?.teams)) {
+      setJsonImportError('Format invalide — attendu : { "teams": [{ "player1": "…", "player2": "…" }] }')
+      return
+    }
+
+    setIsImporting(true)
+
+    const allNames = new Set<string>()
+    for (const t of parsed.teams) {
+      if (t.player1?.trim()) allNames.add(t.player1.trim())
+      if (t.player2?.trim()) allNames.add(t.player2.trim())
+    }
+
+    const { data: existingData } = await supabase.from('tt_joueurs').select('id, prenom, created_at')
+    const dbPlayers = (existingData ?? []) as Joueur[]
+    const nameToPlayer = new Map(dbPlayers.map((p) => [p.prenom.toLowerCase(), p]))
+
+    const playerMap = new Map<string, Joueur>()
+    const toCreate: string[] = []
+    for (const name of allNames) {
+      const found = nameToPlayer.get(name.toLowerCase())
+      if (found) playerMap.set(name, found)
+      else toCreate.push(name)
+    }
+
+    if (toCreate.length > 0) {
+      const { data: created } = await supabase
+        .from('tt_joueurs')
+        .insert(toCreate.map((prenom) => ({ prenom })))
+        .select('id, prenom, created_at')
+      for (const p of (created ?? []) as Joueur[]) {
+        playerMap.set(p.prenom, p)
+      }
+    }
+
+    const rootNodes = nodes.filter(
+      (n) => !edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana',
+    )
+
+    const slotList: { phaseNodeId: string; slot: number }[] = []
+    for (const node of rootNodes) {
+      for (let s = 1; s <= node.data.config.inputCount; s++) {
+        slotList.push({ phaseNodeId: node.id, slot: s })
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(parsed.teams.length, slotList.length) }, (_, i) => {
+        const team = parsed.teams[i]
+        const p1 = team.player1?.trim() ? playerMap.get(team.player1.trim()) : undefined
+        const p2 = team.player2?.trim() ? playerMap.get(team.player2.trim()) : undefined
+        const { phaseNodeId, slot } = slotList[i]
+        return assignPlayersToSlot(tournamentId, phaseNodeId, slot, p1?.id ?? null, p2?.id ?? null)
+      })
+    )
+
+    // Mettre à jour joueursInscrits avec tous les noms extraits
+    const allNamesArray = Array.from(allNames)
+    update({ joueursInscrits: allNamesArray })
+    setRawJoueurs(allNamesArray.join(', '))
+
+    setIsImporting(false)
+    setShowJsonImport(false)
+    setJsonImportText('')
+  }
+
   async function handleSave() {
     await saveTournament()
     onClose()
@@ -162,6 +251,66 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   }
 
   return (
+    <>
+    {/* Modal import JSON équipes */}
+    {showJsonImport && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col">
+          <div className="flex items-center justify-between px-6 pt-5 pb-3">
+            <h3 className="text-base font-semibold text-gray-900">Importer des équipes</h3>
+            <button
+              onClick={() => setShowJsonImport(false)}
+              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+          <div className="px-6 pb-2">
+            <p className="text-xs text-gray-500 mb-2">
+              Collez un JSON de la forme <code className="bg-gray-100 px-1 rounded">{"{ \"teams\": [{\"player1\": \"…\", \"player2\": \"…\"}] }"}</code>.
+              Les équipes seront assignées dans l'ordre des slots.
+            </p>
+            <textarea
+              value={jsonImportText}
+              onChange={(e) => { setJsonImportText(e.target.value); setJsonImportError(null) }}
+              placeholder={'{\n  "teams": [\n    { "player1": "Alice", "player2": "Bob" }\n  ]\n}'}
+              rows={12}
+              autoFocus
+              className="w-full px-3 py-2.5 text-xs font-mono border border-gray-200 rounded-xl
+                focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
+                resize-none transition-shadow duration-150"
+            />
+            {jsonImportError && (
+              <p className="text-xs text-red-500 mt-1.5">{jsonImportError}</p>
+            )}
+          </div>
+          <div className="px-6 pb-5 pt-3 flex gap-3">
+            <button
+              onClick={() => setShowJsonImport(false)}
+              className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200
+                rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={() => void handleJsonImport()}
+              disabled={isImporting || !jsonImportText.trim()}
+              className="flex-1 px-3 py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl
+                hover:bg-purple-700 transition-colors disabled:opacity-50
+                flex items-center justify-center gap-2"
+            >
+              {isImporting && (
+                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              )}
+              {isImporting ? 'Import en cours…' : 'Importer'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 flex flex-col max-h-[90vh]">
 
@@ -446,6 +595,34 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
             )}
           </div>
 
+          {/* Gestion des équipes */}
+          {matchesLoaded && (
+            <div className="border-t border-gray-100 pt-4 flex flex-col gap-2">
+              {onOpenPlayerAssignment && (
+                <button
+                  onClick={onOpenPlayerAssignment}
+                  className="w-full px-3 py-2.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200
+                    rounded-lg hover:bg-gray-100 transition-colors duration-150 flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                  </svg>
+                  Gérer les joueurs / équipes
+                </button>
+              )}
+              <button
+                onClick={() => { setJsonImportText(''); setJsonImportError(null); setShowJsonImport(true) }}
+                className="w-full px-3 py-2.5 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200
+                  rounded-lg hover:bg-purple-100 transition-colors duration-150 flex items-center justify-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+                Importer équipes depuis JSON
+              </button>
+            </div>
+          )}
+
           {/* Copier le tournoi */}
           <div className="border-t border-gray-100 pt-2">
             {!showCopyModal ? (
@@ -555,5 +732,6 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
 
       </div>
     </div>
+    </>
   )
 }

@@ -17,6 +17,7 @@ interface MatchState {
   loadMatches: (tournamentId: string) => Promise<void>
   generateMatches: (tournamentId: string, graph: TournamentGraph) => Promise<void>
   assignRandomTeams: (tournamentId: string, graph: TournamentGraph) => Promise<void>
+  seedRandomAssignments: (tournamentId: string, graph: TournamentGraph) => Promise<void>
   assignTeamToPhaseSlot: (tournamentId: string, phaseNodeId: string, slot: number, teamId: string | null) => Promise<void>
   assignPlayersToSlot: (tournamentId: string, phaseNodeId: string, slot: number, player1Id: string | null, player2Id: string | null) => Promise<string | null>
   updateMatchScore: (matchId: string, score1: number, score2: number) => Promise<void>
@@ -232,6 +233,88 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     set({ matches: updatedMatches ?? [], isAssigning: false })
   },
 
+  seedRandomAssignments: async (tournamentId, graph) => {
+    set({ isAssigning: true })
+
+    const rootNodes = graph.nodes.filter(
+      (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana',
+    )
+
+    // Recharger les matchs depuis DB pour avoir les équipes actuellement assignées
+    const { data: dbMatches } = await supabase
+      .from('tt_matches')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('phase_node_id')
+      .order('ordre')
+
+    const currentMatches = (dbMatches ?? []) as Match[]
+
+    // Construire le mapping slot → équipe actuelle pour chaque phase
+    const slotTeamEntries: { phaseNodeId: string; slot: number; teamId: string | null }[] = []
+
+    for (const node of rootNodes) {
+      const { type, inputCount } = node.data.config
+      const pairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
+      const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
+
+      const slotToTeam = new Map<number, string | null>()
+      for (const pair of pairs) {
+        const match = phaseMatches.find((m) => m.ordre === pair.ordre)
+        if (!match) continue
+        if (!slotToTeam.has(pair.slot1)) slotToTeam.set(pair.slot1, match.equipe1_id)
+        if (!slotToTeam.has(pair.slot2)) slotToTeam.set(pair.slot2, match.equipe2_id)
+      }
+
+      for (let s = 1; s <= inputCount; s++) {
+        slotTeamEntries.push({ phaseNodeId: node.id, slot: s, teamId: slotToTeam.get(s) ?? null })
+      }
+    }
+
+    // Extraire et mélanger uniquement les équipes assignées (non-nulles)
+    const assignedTeamIds = shuffle(
+      slotTeamEntries.map((e) => e.teamId).filter(Boolean) as string[],
+    )
+
+    // Réaffecter les équipes mélangées aux slots dans l'ordre
+    const slotToShuffled = new Map<string, string | null>()
+    let idx = 0
+    for (const entry of slotTeamEntries) {
+      slotToShuffled.set(`${entry.phaseNodeId}-${entry.slot}`, entry.teamId !== null ? (assignedTeamIds[idx++] ?? null) : null)
+    }
+
+    // Mettre à jour chaque match en DB
+    const allUpdates: PromiseLike<unknown>[] = []
+    for (const node of rootNodes) {
+      const { type, inputCount } = node.data.config
+      const pairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
+      const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
+
+      for (const pair of pairs) {
+        const match = phaseMatches.find((m) => m.ordre === pair.ordre)
+        if (!match) continue
+        allUpdates.push(
+          supabase.from('tt_matches').update({
+            equipe1_id: slotToShuffled.get(`${node.id}-${pair.slot1}`) ?? null,
+            equipe2_id: slotToShuffled.get(`${node.id}-${pair.slot2}`) ?? null,
+          }).eq('id', match.id),
+        )
+      }
+    }
+
+    await Promise.all(allUpdates)
+
+    // Recharger le store
+    const { data: updatedMatches } = await supabase
+      .from('tt_matches')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('phase_node_id')
+      .order('ordre')
+
+    set({ matches: updatedMatches ?? [], isAssigning: false })
+  },
+
   updateMatchScore: async (matchId, score1, score2) => {
     const finishedAt = new Date().toISOString()
 
@@ -382,8 +465,24 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
     const { type, inputCount } = node.data.config
     const pairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
-    const { matches } = get()
-    const phaseMatches = matches.filter((m) => m.phase_node_id === phaseNodeId)
+    let phaseMatches = get().matches.filter((m) => m.phase_node_id === phaseNodeId)
+
+    // Si le store est vide (pas encore chargé), recharger depuis DB
+    if (phaseMatches.length === 0) {
+      const { data } = await supabase
+        .from('tt_matches')
+        .select('*')
+        .eq('tournament_id', tournamentId)
+        .eq('phase_node_id', phaseNodeId)
+      phaseMatches = (data ?? []) as Match[]
+      if (phaseMatches.length > 0) {
+        set((state) => {
+          const existingIds = new Set(state.matches.map((m) => m.id))
+          const newMatches = phaseMatches.filter((m) => !existingIds.has(m.id))
+          return newMatches.length > 0 ? { matches: [...state.matches, ...newMatches] } : state
+        })
+      }
+    }
 
     type MatchUpdate = { matchId: string; field: 'equipe1_id' | 'equipe2_id'; value: string | null }
     const updates: MatchUpdate[] = []
@@ -411,7 +510,6 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       }),
     }))
 
-    void tournamentId // unused but kept for API clarity
   },
 
   assignPlayersToSlot: async (tournamentId, phaseNodeId, slot, player1Id, player2Id) => {
