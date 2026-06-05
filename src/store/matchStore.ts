@@ -5,6 +5,7 @@ import { generateAllMatches, computeInputSlotPairs } from '../lib/matchGeneratio
 import { computeAdvancements, computeAdvancementResets } from '../lib/advancement'
 import { computeNextRoundPairings } from '../lib/swissPairing'
 import { useTournamentStore } from './tournamentStore'
+import { recalculateHoraires } from '../lib/scheduleRecalculation'
 
 interface MatchState {
   matches: Match[]
@@ -232,20 +233,22 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   },
 
   updateMatchScore: async (matchId, score1, score2) => {
+    const finishedAt = new Date().toISOString()
+
     await supabase
       .from('tt_matches')
       .update({
         score_equipe1: score1,
         score_equipe2: score2,
         statut: 'termine' as const,
+        finished_at: finishedAt,
       })
       .eq('id', matchId)
 
-    // Mise à jour optimiste locale
     set((state) => ({
       matches: state.matches.map((m) =>
         m.id === matchId
-          ? { ...m, score_equipe1: score1, score_equipe2: score2, statut: 'termine' as const }
+          ? { ...m, score_equipe1: score1, score_equipe2: score2, statut: 'termine' as const, finished_at: finishedAt }
           : m,
       ),
     }))
@@ -311,17 +314,32 @@ export const useMatchStore = create<MatchState>((set, get) => ({
         }
       }
     }
+
+    // Recalcul dynamique des horaires si le match est score_based
+    const { nodes: storeNodes, tournamentConfig } = useTournamentStore.getState()
+    const finishedMatch = get().matches.find((m) => m.id === matchId)
+    const phaseNode = storeNodes.find((n) => n.id === finishedMatch?.phase_node_id)
+    const effectiveType =
+      phaseNode?.data.config.matchType ?? tournamentConfig.matchType ?? 'time_fixed'
+
+    if (effectiveType === 'score_based') {
+      const duree = phaseNode?.data.config.dureeMatch ?? tournamentConfig.dureeMatch ?? 60
+      const updates = recalculateHoraires(get().matches, matchId, duree)
+      if (updates.length > 0) {
+        await Promise.all(updates.map((u) => get().updateMatchHoraire(u.matchId, u.newHoraire)))
+      }
+    }
   },
 
   clearMatchScore: async (matchId) => {
     await supabase
       .from('tt_matches')
-      .update({ score_equipe1: null, score_equipe2: null, statut: 'a_jouer' })
+      .update({ score_equipe1: null, score_equipe2: null, statut: 'a_jouer', finished_at: null })
       .eq('id', matchId)
     set((state) => ({
       matches: state.matches.map((m) =>
         m.id === matchId
-          ? { ...m, score_equipe1: null, score_equipe2: null, statut: 'a_jouer' as const }
+          ? { ...m, score_equipe1: null, score_equipe2: null, statut: 'a_jouer' as const, finished_at: null }
           : m,
       ),
     }))

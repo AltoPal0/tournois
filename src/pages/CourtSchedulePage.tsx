@@ -483,6 +483,11 @@ export default function CourtSchedulePage() {
             })}
           </span>
         )}
+        {tournamentConfig.matchType === 'score_based' && (
+          <span className="text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+            ~ Horaires approximatifs
+          </span>
+        )}
 
         <div className="flex-1" />
 
@@ -634,9 +639,30 @@ export default function CourtSchedulePage() {
                               {teamLine}
                             </p>
                           )}
-                          <p className="text-[10px] text-gray-400 mt-0.5">
-                            {fmtTime(startMin)}
-                          </p>
+                          {match.statut === 'termine' && match.score_equipe1 != null && match.score_equipe2 != null ? (
+                            <p className="text-[11px] font-bold text-emerald-700 mt-0.5">
+                              {match.score_equipe1} – {match.score_equipe2}
+                              <span className="text-[10px] font-normal text-gray-400 ml-1.5">
+                                {(() => {
+                                  if (match.finished_at) {
+                                    const d = new Date(match.finished_at)
+                                    return `fin ${fmtTime(d.getHours() * 60 + d.getMinutes())}`
+                                  }
+                                  const nextOnPiste = scheduled
+                                    .filter((x) => x.piste === match.piste && toMinutes(x.horaire!) > startMin)
+                                    .sort((a, b) => toMinutes(a.horaire!) - toMinutes(b.horaire!))[0]
+                                  const finMin = nextOnPiste
+                                    ? toMinutes(nextOnPiste.horaire!)
+                                    : startMin + (slotDurMap[match.phase_node_id] ?? 60)
+                                  return `fin ~${fmtTime(finMin)}`
+                                })()}
+                              </span>
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              {tournamentConfig.matchType === 'score_based' && match.statut === 'a_jouer' ? '~' : ''}{fmtTime(startMin)}
+                            </p>
+                          )}
                           {isUpdatingThis && (
                             <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-lg">
                               <div className="h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />

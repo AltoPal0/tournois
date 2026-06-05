@@ -15,17 +15,27 @@ export function TennisBall({ className }: { className?: string }) {
 // Affichage compact des scores dans les cartes match (export pour PhaseSection)
 // ---------------------------------------------------------------------------
 
-export function ScoreDisplay({ v1, v2 }: { v1: number; v2: number }) {
+export function ScoreDisplay({
+  v1,
+  v2,
+  winnerClass = 'text-padel-blue',
+  loserClass = 'text-gray-300',
+}: {
+  v1: number
+  v2: number
+  winnerClass?: string
+  loserClass?: string
+}) {
   const team1Won = v1 > v2
   const team2Won = v2 > v1
   return (
     <div className="flex flex-col items-end gap-0">
       <span className={`text-xl font-black font-mono leading-tight tabular-nums
-        ${team1Won ? 'text-padel-blue' : 'text-gray-300'}`}>
+        ${team1Won ? winnerClass : loserClass}`}>
         {v1}
       </span>
       <span className={`text-xl font-black font-mono leading-tight tabular-nums
-        ${team2Won ? 'text-padel-blue' : 'text-gray-300'}`}>
+        ${team2Won ? winnerClass : loserClass}`}>
         {v2}
       </span>
     </div>

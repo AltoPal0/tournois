@@ -15,7 +15,10 @@ export interface PhaseConfig {
   roundCount?: number
   heureDebut?: string
   dureeMatch?: number
+  matchType?: 'time_fixed' | 'score_based'
 }
+
+export type PlayerTemplate = 'default' | 'slick-dark' | 'palm-springs' | 'green-turf'
 
 export interface TournamentConfig {
   sameDay: boolean
@@ -24,7 +27,9 @@ export interface TournamentConfig {
   pistes?: number[]
   heureDebut?: string
   dureeMatch?: number
+  matchType?: 'time_fixed' | 'score_based'
   joueursInscrits?: string[]
+  playerTemplate?: PlayerTemplate
 }
 
 export interface PhaseNodeData extends Record<string, unknown> {
@@ -102,5 +107,6 @@ export interface Match {
   round: number | null
   score_equipe1: number | null
   score_equipe2: number | null
+  finished_at: string | null
   created_at: string
 }

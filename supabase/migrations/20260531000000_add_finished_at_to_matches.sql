@@ -1,0 +1,1 @@
+ALTER TABLE tt_matches ADD COLUMN finished_at TIMESTAMPTZ;

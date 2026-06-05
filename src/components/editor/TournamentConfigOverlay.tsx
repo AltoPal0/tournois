@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { useTournamentStore } from '../../store/tournamentStore'
-import type { TournamentConfig } from '../../types/tournament'
+import type { TournamentConfig, PlayerTemplate } from '../../types/tournament'
 
 // ---------------------------------------------------------------------------
 // Normalisation des URLs d'images (imgur gallery → lien direct)
@@ -307,6 +307,121 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
                 transition-shadow duration-150"
             />
             <p className="text-xs text-gray-400 mt-1">Peut être surchargé par phase</p>
+          </div>
+
+          {/* Type de match */}
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-xs font-medium text-gray-500 mb-2">Type de match</label>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              {([
+                { value: 'time_fixed', label: 'Durée fixe' },
+                { value: 'score_based', label: 'Terminé par score' },
+              ] as const).map(({ value, label }, i) => (
+                <button
+                  key={value}
+                  onClick={() => update({ matchType: value })}
+                  className={`flex-1 py-2 text-xs font-medium transition-colors duration-150
+                    ${(tournamentConfig.matchType ?? 'time_fixed') === value
+                      ? 'bg-gray-900 text-white'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'}
+                    ${i !== 0 ? 'border-l border-gray-200' : ''}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {(tournamentConfig.matchType ?? 'time_fixed') === 'score_based' && (
+              <p className="text-xs text-blue-500 mt-1.5">
+                Les horaires seront recalculés à chaque score saisi. Peut être surchargé par phase.
+              </p>
+            )}
+          </div>
+
+          {/* Apparence joueurs */}
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-xs font-medium text-gray-500 mb-3">Apparence joueurs</label>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                {
+                  value: 'default' as PlayerTemplate,
+                  label: 'Default',
+                  bg: '#0F172A',
+                  card: '#1E293B',
+                  accent: '#F59E0B',
+                  accent2: '#3B82F6',
+                },
+                {
+                  value: 'slick-dark' as PlayerTemplate,
+                  label: 'Modern Slick',
+                  bg: '#EEF3FF',
+                  card: '#FFFFFF',
+                  accent: '#0044EE',
+                  accent2: '#FFD100',
+                },
+                {
+                  value: 'palm-springs' as PlayerTemplate,
+                  label: 'Palm Springs',
+                  bg: '#FAF7F2',
+                  card: '#FFFFFF',
+                  accent: '#C84B31',
+                  accent2: '#7A9E7E',
+                },
+                {
+                  value: 'green-turf' as PlayerTemplate,
+                  label: 'Pink Love',
+                  bg: '#FFF1E8',
+                  card: '#FFFFFF',
+                  accent: '#B23A54',
+                  accent2: '#E85D75',
+                },
+              ]).map(({ value, label, bg, card, accent, accent2 }) => {
+                const isSelected = (tournamentConfig.playerTemplate ?? 'default') === value
+                return (
+                  <button
+                    key={value}
+                    onClick={() => update({ playerTemplate: value })}
+                    className={`relative rounded-xl overflow-hidden border-2 transition-all duration-150
+                      ${isSelected ? 'border-blue-500 shadow-md shadow-blue-500/20' : 'border-gray-200 hover:border-gray-300'}`}
+                  >
+                    {/* Aperçu miniature */}
+                    <div className="p-2" style={{ background: bg }}>
+                      {/* Header simulé */}
+                      <div className="h-2 mb-1.5 w-full" style={{ background: accent }} />
+                      {/* Cartes de match simulées */}
+                      {[0, 1].map((i) => (
+                        <div
+                          key={i}
+                          className="h-4 mb-1 flex items-center px-1.5 gap-1"
+                          style={{
+                            background: card,
+                            borderLeft: `3px solid ${i === 0 ? accent : accent2}`,
+                            borderRadius: '0 2px 2px 0',
+                          }}
+                        >
+                          <div className="h-1.5 rounded-full flex-1" style={{ background: '#00000022' }} />
+                          <div className="h-1.5 w-2.5 rounded-full" style={{ background: i === 0 ? accent : accent2, opacity: 0.9 }} />
+                        </div>
+                      ))}
+                    </div>
+                    {/* Nom du template */}
+                    <div className={`px-2 py-1.5 text-center
+                      ${isSelected ? 'bg-blue-50' : 'bg-white'}`}>
+                      <span className={`text-[11px] font-semibold
+                        ${isSelected ? 'text-blue-600' : 'text-gray-600'}`}>
+                        {label}
+                      </span>
+                    </div>
+                    {isSelected && (
+                      <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-2.5 h-2.5 text-white" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Joueurs inscrits */}

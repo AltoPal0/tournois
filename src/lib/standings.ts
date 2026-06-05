@@ -90,21 +90,21 @@ export function computeStandings(matches: Match[]): StandingRow[] {
     }
   }
 
-  // Trier : points desc → confrontation directe → diff jeux desc
+  // Trier : points desc → diff jeux desc → confrontation directe → jeux gagnés
   const sorted = Array.from(rows.values()).sort((a, b) => {
     // 1. Points
     if (b.points !== a.points) return b.points - a.points
 
-    // 2. Confrontation directe
+    // 2. Différence de jeux
+    const diffA = a.gamesWon - a.gamesLost
+    const diffB = b.gamesWon - b.gamesLost
+    if (diffB !== diffA) return diffB - diffA
+
+    // 3. Confrontation directe (départage final entre 2 équipes à égalité)
     const aBeatsB = headToHead.get(a.teamId)?.get(b.teamId) === true
     const bBeatsA = headToHead.get(b.teamId)?.get(a.teamId) === true
     if (aBeatsB && !bBeatsA) return -1
     if (bBeatsA && !aBeatsB) return 1
-
-    // 3. Différence de jeux
-    const diffA = a.gamesWon - a.gamesLost
-    const diffB = b.gamesWon - b.gamesLost
-    if (diffB !== diffA) return diffB - diffA
 
     // 4. Jeux gagnés
     return b.gamesWon - a.gamesWon

@@ -3,9 +3,8 @@ import { useParams, Link } from 'react-router'
 import { useMatchStore } from '../store/matchStore'
 import { useTournamentStore } from '../store/tournamentStore'
 import { supabase } from '../lib/supabase'
-import type { TeamWithJoueurs, TournamentGraph, PhaseType } from '../types/tournament'
+import type { TeamWithJoueurs, TournamentGraph, PhaseType, PlayerTemplate } from '../types/tournament'
 import PhaseSection from '../components/matches/PhaseSection'
-import PhaseNav from '../components/matches/PhaseNav'
 import PlayerAssignmentOverlay from '../components/matches/PlayerAssignmentOverlay'
 import PlayerSelectSheet from '../components/matches/PlayerSelectSheet'
 import NextMatchBanner from '../components/matches/NextMatchBanner'
@@ -38,8 +37,9 @@ export default function TournamentMatchesPage() {
   const [isPlayerOverlayOpen, setIsPlayerOverlayOpen] = useState(false)
   const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false)
   const [isActivating, setIsActivating] = useState(false)
-  // false = vue filtrée (matchs du joueur), true = tous les matchs
-  const [showAllMatches, setShowAllMatches] = useState(false)
+  const [isBurgerOpen, setIsBurgerOpen] = useState(false)
+  // true = tous les matchs (défaut), false = seulement les matchs du joueur
+  const [showAllMatches, setShowAllMatches] = useState(true)
 
   const { identity, setIdentity, clearIdentity, findMyTeam } = usePlayerIdentity(id ?? '')
 
@@ -130,9 +130,9 @@ export default function TournamentMatchesPage() {
     }
   }, [sortedPhases, activePhaseId])
 
-  // Réinitialiser le filtre uniquement quand le joueur change d'identité
+  // Réinitialiser vers "tous les matchs" quand le joueur change d'identité
   useEffect(() => {
-    setShowAllMatches(false)
+    setShowAllMatches(true)
   }, [identity?.joueurId])
 
   const rootNodeIds = useMemo(
@@ -216,23 +216,86 @@ export default function TournamentMatchesPage() {
     )
   }, [myTeamId, matches])
 
+  const template: PlayerTemplate = tournamentConfig.playerTemplate ?? 'default'
+
+  const initials = identity ? identity.prenom.slice(0, 2).toUpperCase() : null
+
+  const pageBg =
+    template === 'slick-dark' ? 'bg-gradient-to-bl from-[#01344C] to-[#0B5A78]' :
+    template === 'palm-springs' ? 'bg-[#FAF7F2]' :
+    template === 'green-turf' ? 'bg-[#FFF1E8]' :
+    'bg-gray-50'
+
+  const headerBg =
+    template === 'slick-dark' ? 'bg-[#062E38]' :
+    template === 'palm-springs' ? 'bg-[#7A3B28]' :
+    template === 'green-turf' ? 'bg-[#B23A54]' :
+    'bg-navy-900'
+
   // Indicateur pull-to-refresh
   const showPullIndicator = pullDistance > 0 || isRefreshing
   const pullProgress = Math.min(pullDistance / PULL_THRESHOLD, 1)
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
+    <div className={`h-screen flex flex-col overflow-hidden ${pageBg}`}>
 
-      {/* Top bar navy — safe area en haut pour téléphones avec notch/dynamic island */}
+      {/* Top bar — safe area en haut pour téléphones avec notch/dynamic island */}
       <div
-        className="bg-navy-900 shrink-0"
+        className={`${headerBg} shrink-0`}
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-      <div className="h-14 flex items-center px-3 sm:px-4 gap-2 sm:gap-4">
+      <div className="h-14 flex items-center px-3 sm:px-4 gap-2">
+
+        {/* Avatar joueur */}
+        <button
+          onClick={() => setIsPlayerSheetOpen(true)}
+          className="shrink-0 transition-transform duration-150 active:scale-90"
+          aria-label="Mon profil"
+        >
+          {initials ? (
+            <div className={`h-8 w-8 flex items-center justify-center
+              ${template === 'slick-dark'
+                ? 'bg-[#D4E800]'
+                : template === 'palm-springs' || template === 'green-turf'
+                ? 'bg-white/20'
+                : 'bg-padel-gold'}`}
+              style={template === 'slick-dark' ? { clipPath: 'polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%)' } : { borderRadius: '50%' }}
+            >
+              <span className={`text-xs font-black leading-none
+                ${template === 'slick-dark' ? 'text-[#062E38]' : 'text-navy-900'}`}>
+                {initials}
+              </span>
+            </div>
+          ) : (
+            <div className="h-8 w-8 rounded-full flex items-center justify-center bg-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white/50" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+              </svg>
+            </div>
+          )}
+        </button>
+
+        {/* Titre centré */}
         <div className="flex-1 flex justify-center items-center gap-2 min-w-0">
-          <span className="text-sm font-bold text-white truncate">{tournamentName}</span>
+          <span className={`truncate
+            ${template === 'slick-dark'
+              ? 'text-sm font-black uppercase tracking-[0.15em] text-white'
+              : template === 'palm-springs'
+              ? 'text-sm font-bold text-[#E8C9A0]'
+              : template === 'green-turf'
+              ? 'text-sm font-bold text-[#FFF1E8]'
+              : 'text-sm font-bold text-white'}`}>
+            {tournamentName}
+          </span>
           {isActive && (
-            <span className="shrink-0 text-xs font-bold text-padel-gold bg-padel-gold/15 border border-padel-gold/25 px-2 py-0.5 rounded-full">
+            <span className={`shrink-0 text-xs font-bold px-2 py-0.5
+              ${template === 'slick-dark'
+                ? 'text-[#062E38] bg-[#D4E800] font-black [clip-path:polygon(5px_0%,100%_0%,calc(100%-5px)_100%,0%_100%)]'
+                : template === 'palm-springs'
+                ? 'rounded-full text-[#E8A87C] bg-white/10 border border-white/20'
+                : template === 'green-turf'
+                ? 'rounded-full text-[#FFF1E8] bg-white/15 border border-white/20'
+                : 'rounded-full text-padel-gold bg-padel-gold/15 border border-padel-gold/25'}`}>
               En cours
             </span>
           )}
@@ -244,7 +307,7 @@ export default function TournamentMatchesPage() {
             <button
               onClick={() => setIsPlayerOverlayOpen(true)}
               className="relative inline-flex items-center justify-center gap-1.5
-                h-9 px-2.5 sm:px-3 rounded-xl text-xs font-semibold
+                h-8 px-2.5 rounded-lg text-xs font-semibold
                 transition-all duration-200 active:scale-[0.98]
                 bg-white/10 border border-white/10 text-white hover:bg-white/20"
             >
@@ -266,7 +329,7 @@ export default function TournamentMatchesPage() {
                 onClick={handleActivate}
                 disabled={isActivating}
                 className="inline-flex items-center justify-center gap-1.5
-                  h-9 px-2.5 sm:px-3 rounded-xl text-xs font-bold
+                  h-8 px-2.5 rounded-lg text-xs font-bold
                   transition-all duration-200 active:scale-[0.98] disabled:opacity-50
                   bg-padel-gold text-navy-900 hover:bg-padel-gold-dark shadow-sm"
               >
@@ -282,27 +345,29 @@ export default function TournamentMatchesPage() {
             )}
           </div>
         )}
-      </div>
-      </div>
 
-      {/* Phase nav */}
-      {sortedPhases.length > 0 && (
-        <div className="shrink-0">
-          <PhaseNav
-            phases={sortedPhases}
-            activePhaseId={activePhaseId}
-            onSelect={setActivePhaseId}
-            playerIdentity={identity}
-            onUserClick={() => setIsPlayerSheetOpen(true)}
-          />
-        </div>
-      )}
+        {/* Burger menu — navigation entre phases */}
+        {sortedPhases.length > 1 && (
+          <button
+            onClick={() => setIsBurgerOpen(true)}
+            className="shrink-0 h-8 w-8 flex items-center justify-center rounded-lg
+              transition-all duration-150 active:scale-90 bg-white/10 hover:bg-white/20"
+            aria-label="Navigation phases"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        )}
+      </div>
+      </div>
 
       {/* Bannière prochain match — tap pour naviguer vers la bonne phase */}
       {nextMatch && (
         <NextMatchBanner
           match={nextMatch}
           teamsMap={teamsMap}
+          template={template}
           onClick={() => setActivePhaseId(nextMatch.phase_node_id)}
         />
       )}
@@ -409,17 +474,6 @@ export default function TournamentMatchesPage() {
           </div>
         ) : activePhase ? (
           <div className="px-3 sm:px-6 py-4 sm:py-6">
-            {/* Toggle filtre — visible uniquement si la phase contient des matchs du joueur */}
-            {phaseHasMyMatches && (
-              <div className="flex justify-end mb-3">
-                <button
-                  onClick={() => setShowAllMatches((v) => !v)}
-                  className="text-xs font-semibold text-padel-blue/70 hover:text-padel-blue transition-colors"
-                >
-                  {showAllMatches ? '← Mes matchs' : 'Voir tous les matchs'}
-                </button>
-              </div>
-            )}
             <PhaseSection
               name={activePhase.name}
               type={activePhase.type}
@@ -428,11 +482,68 @@ export default function TournamentMatchesPage() {
               teamsMap={teamsMap}
               isActive={isActive}
               sameDay={tournamentConfig.sameDay}
+              scoreBasedSchedule={tournamentConfig.matchType === 'score_based'}
               myTeamId={myTeamId}
+              template={template}
+              showAllMatches={showAllMatches}
+              onToggleFilter={() => setShowAllMatches((v) => !v)}
             />
           </div>
         ) : null}
       </div>
+
+      {/* Burger — navigation entre phases */}
+      {isBurgerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-end"
+          onClick={() => setIsBurgerOpen(false)}
+        >
+          <div
+            className={`w-full ${
+              template === 'slick-dark' ? 'bg-[#062E38]' :
+              template === 'palm-springs' ? 'bg-[#6B3020]' :
+              template === 'green-turf' ? 'bg-[#8C2D40]' :
+              'bg-navy-900'
+            } rounded-t-2xl`}
+            style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-3 mb-4" />
+            <div className="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] px-5 mb-2">
+              Phases du tournoi
+            </div>
+            {sortedPhases.map((phase) => (
+              <button
+                key={phase.id}
+                onClick={() => { setActivePhaseId(phase.id); setIsBurgerOpen(false) }}
+                className={`w-full text-left px-5 py-3.5 flex items-center gap-3 transition-colors ${
+                  phase.id === activePhaseId
+                    ? template === 'slick-dark'
+                      ? 'text-[#D4E800]'
+                      : template === 'palm-springs'
+                      ? 'text-[#E8C9A0]'
+                      : template === 'green-turf'
+                      ? 'text-[#F9BCC8]'
+                      : 'text-padel-gold'
+                    : 'text-white/50'
+                }`}
+              >
+                {phase.id === activePhaseId && (
+                  <div className={`w-1 h-4 shrink-0 ${
+                    template === 'slick-dark' ? 'bg-[#D4E800]' :
+                    template === 'palm-springs' ? 'bg-[#E8C9A0]' :
+                    template === 'green-turf' ? 'bg-[#F9BCC8]' :
+                    'bg-padel-gold'
+                  }`} />
+                )}
+                <span className={`font-${phase.id === activePhaseId ? 'black' : 'semibold'} text-sm`}>
+                  {phase.name}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Overlay assignation joueurs */}
       <PlayerAssignmentOverlay

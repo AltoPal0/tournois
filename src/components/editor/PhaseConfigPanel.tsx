@@ -185,6 +185,28 @@ function PanelContent({
               transition-shadow duration-150"
           />
         </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1.5">Type de match — surcharge le global</label>
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+            {([
+              { value: undefined, label: 'Hérite' },
+              { value: 'time_fixed', label: 'Durée fixe' },
+              { value: 'score_based', label: 'Par score' },
+            ] as const).map(({ value, label }, i) => (
+              <button
+                key={String(value)}
+                onClick={() => updatePhaseConfig(nodeId, { matchType: value })}
+                className={`flex-1 py-1.5 text-xs font-medium transition-colors duration-150
+                  ${config.matchType === value
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'}
+                  ${i !== 0 ? 'border-l border-gray-200' : ''}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Input count (caché pour match_simple, toujours 2) */}
