@@ -242,6 +242,17 @@ export default function TournamentMatchesPage() {
 
   const initials = identity ? identity.prenom.slice(0, 2).toUpperCase() : null
 
+  const activePhaseIndicator = useMemo(() => {
+    if (!activePhase?.name) return null
+    const name = activePhase.name
+    if (/finale?/i.test(name)) return 'F'
+    const digit = name.match(/(\d)/)
+    if (digit) return digit[1]
+    const letter = name.match(/\b([A-Z])\b/)
+    if (letter) return letter[1]
+    return null
+  }, [activePhase?.name])
+
   const pageBg =
     template === 'slick-dark' ? 'bg-gradient-to-bl from-[#01344C] to-[#0B5A78]' :
     template === 'palm-springs' ? 'bg-[#FAF7F2]' :
@@ -344,10 +355,15 @@ export default function TournamentMatchesPage() {
           {sortedPhases.length > 1 && (
             <button
               onClick={() => setIsBurgerOpen(true)}
-              className="shrink-0 h-8 w-8 flex items-center justify-center rounded-lg
+              className="shrink-0 h-8 flex items-center gap-1 px-2 rounded-lg
                 transition-all duration-150 active:scale-90 bg-white/10 hover:bg-white/20"
               aria-label="Navigation phases"
             >
+              {activePhaseIndicator && (
+                <span className="text-yellow-400 text-[11px] font-black leading-none">
+                  {activePhaseIndicator}
+                </span>
+              )}
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
@@ -534,7 +550,7 @@ export default function TournamentMatchesPage() {
       {/* Burger — navigation entre phases */}
       {isBurgerOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 flex items-end"
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end"
           onClick={() => setIsBurgerOpen(false)}
         >
           <div
