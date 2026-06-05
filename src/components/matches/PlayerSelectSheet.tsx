@@ -141,11 +141,11 @@ export default function PlayerSelectSheet({
                   {currentIdentity.prenom.slice(0, 2).toUpperCase()}
                 </span>
               </div>
-              <span className="text-sm font-semibold" style={{ color: theme.textPrimary }}>{currentIdentity.prenom}</span>
+              <span className={`${fontScale === 'xxl' ? 'text-lg' : fontScale === 'xl' ? 'text-base' : 'text-sm'} font-semibold`} style={{ color: theme.textPrimary }}>{currentIdentity.prenom}</span>
             </div>
             <button
               onClick={handleClear}
-              className="text-xs font-medium transition-colors"
+              className={`${fontScale === 'xxl' ? 'text-sm' : 'text-xs'} font-medium transition-colors`}
               style={{ color: theme.textMuted }}
             >
               Se déconnecter
@@ -204,7 +204,7 @@ export default function PlayerSelectSheet({
                 <button
                   key={p.id}
                   onClick={() => setSelectedId(p.id === selectedId ? null : p.id)}
-                  className="px-4 py-2 rounded-full text-sm font-semibold transition-all duration-150 active:scale-95"
+                  className={`px-4 py-2 rounded-full ${fontScale === 'xxl' ? 'text-lg' : fontScale === 'xl' ? 'text-base' : 'text-sm'} font-semibold transition-all duration-150 active:scale-95`}
                   style={{
                     background: p.id === selectedId ? theme.accent : theme.itemBg,
                     color: p.id === selectedId ? theme.accentText : theme.textPrimary,
@@ -222,7 +222,7 @@ export default function PlayerSelectSheet({
           <button
             onClick={handleConfirm}
             disabled={!selectedPlayer}
-            className="w-full h-14 rounded-2xl text-base font-bold transition-all duration-150 flex items-center justify-center disabled:opacity-40 active:scale-[0.98]"
+            className={`w-full h-14 rounded-2xl ${fontScale === 'xxl' ? 'text-xl' : fontScale === 'xl' ? 'text-lg' : 'text-base'} font-bold transition-all duration-150 flex items-center justify-center disabled:opacity-40 active:scale-[0.98]`}
             style={{
               background: selectedPlayer ? theme.accent : theme.itemBg,
               color: selectedPlayer ? theme.accentText : theme.textMuted,

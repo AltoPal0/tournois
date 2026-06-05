@@ -569,7 +569,7 @@ export default function TournamentMatchesPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-3 mb-4" />
-            <div className="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] px-5 mb-2">
+            <div className={`${fontScale === 'xxl' ? 'text-xs' : 'text-[10px]'} font-bold text-white/30 uppercase tracking-[0.2em] px-5 mb-2`}>
               Phases du tournoi
             </div>
             {sortedPhases.map((phase) => (
@@ -596,7 +596,7 @@ export default function TournamentMatchesPage() {
                     'bg-padel-gold'
                   }`} />
                 )}
-                <span className={`font-${phase.id === activePhaseId ? 'black' : 'semibold'} text-sm`}>
+                <span className={`font-${phase.id === activePhaseId ? 'black' : 'semibold'} ${fontScale === 'xxl' ? 'text-xl' : fontScale === 'xl' ? 'text-base' : 'text-sm'}`}>
                   {phase.name}
                 </span>
               </button>
