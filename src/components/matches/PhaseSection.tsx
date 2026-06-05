@@ -562,6 +562,7 @@ export default function PhaseSection({
           team2Name={scoringTeam2Name}
           isOpen={true}
           onClose={() => setScoringMatch(null)}
+          template={template}
         />
       )}
     </section>

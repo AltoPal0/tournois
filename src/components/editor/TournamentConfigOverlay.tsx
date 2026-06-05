@@ -479,11 +479,6 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
                 </button>
               ))}
             </div>
-            {(tournamentConfig.matchType ?? 'time_fixed') === 'score_based' && (
-              <p className="text-xs text-blue-500 mt-1.5">
-                Les horaires seront recalculés à chaque score saisi. Peut être surchargé par phase.
-              </p>
-            )}
           </div>
 
           {/* Apparence joueurs */}

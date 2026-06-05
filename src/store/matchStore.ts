@@ -5,7 +5,6 @@ import { generateAllMatches, computeInputSlotPairs } from '../lib/matchGeneratio
 import { computeAdvancements, computeAdvancementResets } from '../lib/advancement'
 import { computeNextRoundPairings } from '../lib/swissPairing'
 import { useTournamentStore } from './tournamentStore'
-import { recalculateHoraires } from '../lib/scheduleRecalculation'
 
 interface MatchState {
   matches: Match[]
@@ -399,20 +398,6 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       }
     }
 
-    // Recalcul dynamique des horaires si le match est score_based
-    const { nodes: storeNodes, tournamentConfig } = useTournamentStore.getState()
-    const finishedMatch = get().matches.find((m) => m.id === matchId)
-    const phaseNode = storeNodes.find((n) => n.id === finishedMatch?.phase_node_id)
-    const effectiveType =
-      phaseNode?.data.config.matchType ?? tournamentConfig.matchType ?? 'time_fixed'
-
-    if (effectiveType === 'score_based') {
-      const duree = phaseNode?.data.config.dureeMatch ?? tournamentConfig.dureeMatch ?? 60
-      const updates = recalculateHoraires(get().matches, matchId, duree)
-      if (updates.length > 0) {
-        await Promise.all(updates.map((u) => get().updateMatchHoraire(u.matchId, u.newHoraire)))
-      }
-    }
   },
 
   clearMatchScore: async (matchId) => {
