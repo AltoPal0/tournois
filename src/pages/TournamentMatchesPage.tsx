@@ -272,6 +272,15 @@ export default function TournamentMatchesPage() {
   const showPullIndicator = pullDistance > 0 || isRefreshing
   const pullProgress = Math.min(pullDistance / PULL_THRESHOLD, 1)
 
+  // Tailles typographiques de la top bar selon fontScale
+  const hdrTitle  = fontScale === 'xxl' ? 'text-lg'   : fontScale === 'xl' ? 'text-base' : 'text-sm'
+  const hdrBadge  = fontScale === 'xxl' ? 'text-sm'   : 'text-xs'
+  const hdrIcon   = fontScale === 'xxl' ? 'h-5 w-5'   : 'h-4 w-4'
+  const hdrAvatar = fontScale === 'xxl' ? 'h-10 w-10' : fontScale === 'xl' ? 'h-9 w-9' : 'h-8 w-8'
+  const hdrInitials = fontScale === 'xxl' ? 'text-sm' : 'text-xs'
+  const hdrIndicator = fontScale === 'xxl' ? 'text-sm' : fontScale === 'xl' ? 'text-[12px]' : 'text-[11px]'
+  const hdrH = fontScale === 'xxl' ? 'h-16' : 'h-14'
+
   return (
     <div className={`h-screen flex flex-col overflow-hidden ${pageBg}`}>
 
@@ -280,7 +289,7 @@ export default function TournamentMatchesPage() {
         className={`${headerBg} shrink-0`}
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-      <div className="h-14 flex items-center px-3 sm:px-4 gap-2">
+      <div className={`${hdrH} flex items-center px-3 sm:px-4 gap-2`}>
 
         {/* Avatar joueur */}
         <button
@@ -289,7 +298,7 @@ export default function TournamentMatchesPage() {
           aria-label="Mon profil"
         >
           {initials ? (
-            <div className={`h-8 w-8 flex items-center justify-center
+            <div className={`${hdrAvatar} flex items-center justify-center
               ${template === 'slick-dark'
                 ? 'bg-[#D4E800]'
                 : template === 'palm-springs' || template === 'green-turf'
@@ -297,14 +306,14 @@ export default function TournamentMatchesPage() {
                 : 'bg-padel-gold'}`}
               style={template === 'slick-dark' ? { clipPath: 'polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%)' } : { borderRadius: '50%' }}
             >
-              <span className={`text-xs font-black leading-none
+              <span className={`${hdrInitials} font-black leading-none
                 ${template === 'slick-dark' ? 'text-[#062E38]' : 'text-navy-900'}`}>
                 {initials}
               </span>
             </div>
           ) : (
-            <div className="h-8 w-8 rounded-full flex items-center justify-center bg-white/10">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white/50" viewBox="0 0 20 20" fill="currentColor">
+            <div className={`${hdrAvatar} rounded-full flex items-center justify-center bg-white/10`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className={`${hdrIcon} text-white/50`} viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
               </svg>
             </div>
@@ -315,16 +324,16 @@ export default function TournamentMatchesPage() {
         <div className="flex-1 flex justify-center items-center gap-2 min-w-0">
           <span className={`truncate
             ${template === 'slick-dark'
-              ? 'text-sm font-black uppercase tracking-[0.15em] text-white'
+              ? `${hdrTitle} font-black uppercase tracking-[0.15em] text-white`
               : template === 'palm-springs'
-              ? 'text-sm font-bold text-[#E8C9A0]'
+              ? `${hdrTitle} font-bold text-[#E8C9A0]`
               : template === 'green-turf'
-              ? 'text-sm font-bold text-[#FFF1E8]'
-              : 'text-sm font-bold text-white'}`}>
+              ? `${hdrTitle} font-bold text-[#FFF1E8]`
+              : `${hdrTitle} font-bold text-white`}`}>
             {tournamentName}
           </span>
           {isActive && (
-            <span className={`shrink-0 text-xs font-bold px-2 py-0.5
+            <span className={`shrink-0 ${hdrBadge} font-bold px-2 py-0.5
               ${template === 'slick-dark'
                 ? 'text-[#062E38] bg-[#D4E800] font-black [clip-path:polygon(5px_0%,100%_0%,calc(100%-5px)_100%,0%_100%)]'
                 : template === 'palm-springs'
@@ -348,7 +357,7 @@ export default function TournamentMatchesPage() {
                 transition-all duration-150 active:scale-90 bg-white/10 hover:bg-white/20"
               aria-label="Gestion des joueurs"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className={`${hdrIcon} text-white`} viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
               </svg>
             </button>
@@ -363,11 +372,11 @@ export default function TournamentMatchesPage() {
               aria-label="Navigation phases"
             >
               {activePhaseIndicator && (
-                <span className="text-yellow-400 text-[11px] font-black leading-none">
+                <span className={`text-yellow-400 ${hdrIndicator} font-black leading-none`}>
                   {activePhaseIndicator}
                 </span>
               )}
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <svg xmlns="http://www.w3.org/2000/svg" className={`${hdrIcon} text-white`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
