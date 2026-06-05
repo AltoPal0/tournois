@@ -23,6 +23,8 @@ export interface PhaseConfig {
 
 export type PlayerTemplate = 'default' | 'slick-dark' | 'palm-springs' | 'green-turf'
 
+export type FontScale = 'normal' | 'xl' | 'xxl'
+
 export interface TournamentConfig {
   sameDay: boolean
   matchDate: string | null

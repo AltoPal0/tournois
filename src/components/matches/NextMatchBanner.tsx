@@ -1,9 +1,16 @@
-import type { Match, TeamWithJoueurs, PlayerTemplate } from '../../types/tournament'
+import type { Match, TeamWithJoueurs, PlayerTemplate, FontScale } from '../../types/tournament'
+
+function fscale(scale: FontScale | undefined, normal: string, xl: string, xxl: string): string {
+  if (scale === 'xxl') return xxl
+  if (scale === 'xl') return xl
+  return normal
+}
 
 interface NextMatchBannerProps {
   match: Match
   teamsMap: Map<string, TeamWithJoueurs>
   template?: PlayerTemplate
+  fontScale?: FontScale
   onClick?: () => void
 }
 
@@ -71,7 +78,7 @@ function getBannerStyles(template: PlayerTemplate): BannerStyles {
   }
 }
 
-export default function NextMatchBanner({ match, teamsMap, template = 'default', onClick }: NextMatchBannerProps) {
+export default function NextMatchBanner({ match, teamsMap, template = 'default', fontScale, onClick }: NextMatchBannerProps) {
   const s = getBannerStyles(template)
   const team1 = getTeamName(match.equipe1_id, teamsMap)
   const team2 = getTeamName(match.equipe2_id, teamsMap)
@@ -93,10 +100,10 @@ export default function NextMatchBanner({ match, teamsMap, template = 'default',
 
       {/* Texte central */}
       <div className="flex-1 min-w-0">
-        <div className={`${s.label} text-[9px] font-bold uppercase tracking-widest mb-0.5`}>
+        <div className={`${s.label} text-[10px] font-bold uppercase tracking-widest mb-0.5`}>
           Prochain match
         </div>
-        <div className={`${s.teamText} text-sm font-semibold truncate`}>
+        <div className={`${s.teamText} ${fscale(fontScale,'text-sm','text-base','text-lg')} font-semibold truncate`}>
           {team1} <span className={s.teamVs}>vs</span> {team2}
         </div>
       </div>

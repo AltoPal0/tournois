@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Match, PhaseType, TeamWithJoueurs, PlayerTemplate } from '../../types/tournament'
+import type { Match, PhaseType, TeamWithJoueurs, PlayerTemplate, FontScale } from '../../types/tournament'
 import { computeStandings } from '../../lib/standings'
 import { computeAmericanaSingleStandings } from '../../lib/americanaSingleStandings'
 import StandingsTable from './StandingsTable'
@@ -56,12 +56,19 @@ function abbrevLabel(label: string | null): string | null {
     .trim()
 }
 
+function fscale(scale: FontScale | undefined, normal: string, xl: string, xxl: string): string {
+  if (scale === 'xxl') return xxl
+  if (scale === 'xl') return xl
+  return normal
+}
+
 interface CardProps {
   match: Match
   teamsMap: Map<string, TeamWithJoueurs>
   isActive: boolean
   scoreBasedSchedule?: boolean
   myTeamId?: string | null
+  fontScale?: FontScale
   onScoreClick: (match: Match) => void
 }
 
@@ -69,7 +76,7 @@ interface CardProps {
 // DEFAULT — cartes blanches arrondies, score en colonne à droite
 // ---------------------------------------------------------------------------
 
-function MatchCardDefault({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, onScoreClick }: CardProps) {
+function MatchCardDefault({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
   const canScore = isActive && !!(match.equipe1_id && match.equipe2_id)
@@ -92,13 +99,13 @@ function MatchCardDefault({ match, teamsMap, isActive, scoreBasedSchedule, myTea
       <div className="px-4 py-3.5 flex items-center gap-3">
         <div className="flex-1 flex flex-col gap-1.5 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className={`text-sm leading-tight truncate font-semibold ${team1Name ? 'text-navy-900' : 'text-gray-300 italic'}`}>
+            <span className={`${fscale(fontScale,'text-sm','text-base','text-xl')} leading-tight truncate font-semibold ${team1Name ? 'text-navy-900' : 'text-gray-300 italic'}`}>
               {team1Name ?? (abbrevLabel(match.equipe1_label) ?? 'À assigner')}
             </span>
             {team1Won && <span className="w-2 h-2 rounded-full bg-padel-blue shrink-0" />}
           </div>
           <div className="flex items-center gap-1.5">
-            <span className={`text-sm leading-tight truncate font-semibold ${team2Name ? 'text-navy-900' : 'text-gray-300 italic'}`}>
+            <span className={`${fscale(fontScale,'text-sm','text-base','text-xl')} leading-tight truncate font-semibold ${team2Name ? 'text-navy-900' : 'text-gray-300 italic'}`}>
               {team2Name ?? (abbrevLabel(match.equipe2_label) ?? 'À assigner')}
             </span>
             {team2Won && <span className="w-2 h-2 rounded-full bg-padel-blue shrink-0" />}
@@ -133,7 +140,7 @@ const SLICK_CLIP = 'polygon(10px 0%, 100% 0%, 100% calc(100% - 10px), calc(100% 
 // Clip-path intérieur (carte) : 8px pour que le contour jaune de 2px suive la coupe
 const SLICK_CLIP_INNER = 'polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px)'
 
-function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, onScoreClick }: CardProps) {
+function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
   const canScore = isActive && !!(match.equipe1_id && match.equipe2_id)
@@ -157,7 +164,7 @@ function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myT
     >
       {/* Ligne équipe 1 */}
       <div className="px-4 pt-3.5 pb-0 flex items-center gap-2">
-        <span className={`flex-1 text-sm font-black uppercase tracking-wide leading-none truncate
+        <span className={`flex-1 ${fscale(fontScale,'text-sm','text-base','text-xl')} font-black uppercase tracking-wide leading-none truncate
           ${team1Name ? 'text-white' : 'text-white/30'}`}>
           {team1Name ?? (abbrevLabel(match.equipe1_label) ?? '———')}
         </span>
@@ -179,7 +186,7 @@ function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myT
 
       {/* Ligne équipe 2 */}
       <div className="px-4 pb-3.5 flex items-center gap-2">
-        <span className={`flex-1 text-sm font-black uppercase tracking-wide leading-none truncate
+        <span className={`flex-1 ${fscale(fontScale,'text-sm','text-base','text-xl')} font-black uppercase tracking-wide leading-none truncate
           ${team2Name ? 'text-white' : 'text-white/30'}`}>
           {team2Name ?? (abbrevLabel(match.equipe2_label) ?? '———')}
         </span>
@@ -231,7 +238,7 @@ function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myT
 // Score affiché horizontalement au centre. Palette chaude terracotta + crème.
 // ---------------------------------------------------------------------------
 
-function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, onScoreClick }: CardProps) {
+function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
   const canScore = isActive && !!(match.equipe1_id && match.equipe2_id)
@@ -259,9 +266,8 @@ function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, m
       <div className="px-4 py-4 flex items-center gap-2">
         {/* Équipe 1 — côté gauche */}
         <div className={`flex-1 min-w-0 ${team1Won ? 'text-[#C84B31]' : 'text-stone-600'}`}>
-          <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-stone-400 mb-1">Équipe A</div>
-          <div className={`text-sm font-bold leading-snug truncate ${team1Won ? 'text-[#C84B31]' : 'text-stone-800'}`}>
-            {team1Name ?? abbrevLabel(match.equipe1_label) ?? <span className="text-stone-400 italic text-xs">À assigner</span>}
+          <div className={`${fscale(fontScale,'text-sm','text-base','text-xl')} font-bold leading-snug truncate ${team1Won ? 'text-[#C84B31]' : 'text-stone-800'}`}>
+            {team1Name ?? abbrevLabel(match.equipe1_label) ?? <span className="text-stone-400 italic text-sm">À assigner</span>}
           </div>
         </div>
 
@@ -284,9 +290,8 @@ function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, m
 
         {/* Équipe 2 — côté droit */}
         <div className="flex-1 min-w-0 text-right">
-          <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-stone-400 mb-1">Équipe B</div>
-          <div className={`text-sm font-bold leading-snug truncate ${team2Won ? 'text-[#C84B31]' : 'text-stone-800'}`}>
-            {team2Name ?? abbrevLabel(match.equipe2_label) ?? <span className="text-stone-400 italic text-xs">À assigner</span>}
+          <div className={`${fscale(fontScale,'text-sm','text-base','text-xl')} font-bold leading-snug truncate ${team2Won ? 'text-[#C84B31]' : 'text-stone-800'}`}>
+            {team2Name ?? abbrevLabel(match.equipe2_label) ?? <span className="text-stone-400 italic text-sm">À assigner</span>}
           </div>
         </div>
       </div>
@@ -308,7 +313,7 @@ function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, m
 // Scores en rose vif #E85D75. Texte plum #3A1F2B. Doux et lisible.
 // ---------------------------------------------------------------------------
 
-function MatchCardGreenTurf({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, onScoreClick }: CardProps) {
+function MatchCardGreenTurf({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
   const canScore = isActive && !!(match.equipe1_id && match.equipe2_id)
@@ -332,14 +337,14 @@ function MatchCardGreenTurf({ match, teamsMap, isActive, scoreBasedSchedule, myT
         {/* Noms des équipes */}
         <div className="flex-1 flex flex-col gap-1.5 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className={`text-sm leading-tight truncate font-semibold
+            <span className={`${fscale(fontScale,'text-sm','text-base','text-xl')} leading-tight truncate font-semibold
               ${team1Name ? 'text-[#3A1F2B]' : 'text-[#C4A0B0] italic'}`}>
               {team1Name ?? (abbrevLabel(match.equipe1_label) ?? 'À assigner')}
             </span>
             {team1Won && <span className="w-2 h-2 rounded-full bg-[#E85D75] shrink-0" />}
           </div>
           <div className="flex items-center gap-1.5">
-            <span className={`text-sm leading-tight truncate font-semibold
+            <span className={`${fscale(fontScale,'text-sm','text-base','text-xl')} leading-tight truncate font-semibold
               ${team2Name ? 'text-[#3A1F2B]' : 'text-[#C4A0B0] italic'}`}>
               {team2Name ?? (abbrevLabel(match.equipe2_label) ?? 'À assigner')}
             </span>
@@ -392,6 +397,7 @@ interface PhaseSectionProps {
   scoreBasedSchedule?: boolean
   myTeamId?: string | null
   template?: PlayerTemplate
+  fontScale?: FontScale
   showAllMatches?: boolean
   onToggleFilter?: () => void
   onGenerateBatch?: () => void
@@ -412,6 +418,7 @@ export default function PhaseSection({
   scoreBasedSchedule,
   myTeamId,
   template = 'default',
+  fontScale = 'normal',
   showAllMatches = true,
   onToggleFilter,
   onGenerateBatch,
@@ -450,7 +457,7 @@ export default function PhaseSection({
   const scoringTeam1Name = scoringMatch ? getTeamName(scoringMatch.equipe1_id, teamsMap) : null
   const scoringTeam2Name = scoringMatch ? getTeamName(scoringMatch.equipe2_id, teamsMap) : null
 
-  const cardProps = { teamsMap, isActive, scoreBasedSchedule, myTeamId, onScoreClick: setScoringMatch }
+  const cardProps = { teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick: setScoringMatch }
 
   const MatchCardComponent =
     template === 'slick-dark' ? MatchCardSlickDark :
@@ -459,11 +466,12 @@ export default function PhaseSection({
     MatchCardDefault
 
   function RoundHeader({ label }: { label: string }) {
+    const headerSize = fscale(fontScale, 'text-[11px]', 'text-xs', 'text-sm')
     if (template === 'slick-dark') {
       return (
         <div className="flex items-center gap-3 mb-2">
           <div className="w-1 h-5 bg-[#D4E800] shrink-0" />
-          <span className="text-[11px] font-black text-white/60 uppercase tracking-[0.2em]">{label}</span>
+          <span className={`${headerSize} font-black text-white/60 uppercase tracking-[0.2em]`}>{label}</span>
           <div className="flex-1 h-px bg-white/10" />
         </div>
       )
@@ -472,7 +480,7 @@ export default function PhaseSection({
       return (
         <div className="flex items-center gap-3 mb-3">
           <div className="h-px flex-1 bg-stone-200" />
-          <span className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.2em] whitespace-nowrap">{label}</span>
+          <span className={`${headerSize} font-bold text-stone-400 uppercase tracking-[0.2em] whitespace-nowrap`}>{label}</span>
           <div className="h-px flex-1 bg-stone-200" />
         </div>
       )
@@ -480,14 +488,14 @@ export default function PhaseSection({
     if (template === 'green-turf') {
       return (
         <div className="flex items-center gap-2 mb-2">
-          <span className="inline-flex items-center bg-[#B23A54] text-[#FFF1E8] text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-r-full">
+          <span className={`inline-flex items-center bg-[#B23A54] text-[#FFF1E8] ${headerSize} font-bold uppercase tracking-wider px-3 py-1 rounded-r-full`}>
             {label}
           </span>
         </div>
       )
     }
     return (
-      <h3 className="text-xs font-bold text-navy-700/50 uppercase tracking-wider mb-2.5 px-0.5">
+      <h3 className={`${headerSize} font-bold text-navy-700/50 uppercase tracking-wider mb-2.5 px-0.5`}>
         {label}
       </h3>
     )
@@ -550,7 +558,7 @@ export default function PhaseSection({
     <section>
       {(type === 'round_robin' || type === 'tournante_libre' || type === 'americano') && standings.length > 0 && (
         <div className="mb-4">
-          <StandingsTable standings={standings} teamsMap={teamsMap} template={template} />
+          <StandingsTable standings={standings} teamsMap={teamsMap} template={template} fontScale={fontScale} />
         </div>
       )}
 

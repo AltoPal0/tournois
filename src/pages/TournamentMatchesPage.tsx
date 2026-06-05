@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router'
 import { useMatchStore } from '../store/matchStore'
 import { useTournamentStore } from '../store/tournamentStore'
 import { supabase } from '../lib/supabase'
-import type { TeamWithJoueurs, TournamentGraph, PhaseType, PlayerTemplate } from '../types/tournament'
+import type { TeamWithJoueurs, TournamentGraph, PhaseType, PlayerTemplate, FontScale } from '../types/tournament'
 import PhaseSection from '../components/matches/PhaseSection'
 import PlayerSelectSheet from '../components/matches/PlayerSelectSheet'
 import NextMatchBanner from '../components/matches/NextMatchBanner'
@@ -40,6 +40,9 @@ export default function TournamentMatchesPage() {
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
   const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false)
   const [isBurgerOpen, setIsBurgerOpen] = useState(false)
+  const [fontScale, setFontScale] = useState<FontScale>(
+    () => (localStorage.getItem('padel_font_scale') as FontScale) ?? 'normal'
+  )
   // true = tous les matchs (défaut), false = seulement les matchs du joueur
   const [showAllMatches, setShowAllMatches] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(() =>
@@ -379,6 +382,7 @@ export default function TournamentMatchesPage() {
           match={nextMatch}
           teamsMap={teamsMap}
           template={template}
+          fontScale={fontScale}
           onClick={() => setActivePhaseId(nextMatch.phase_node_id)}
         />
       )}
@@ -497,6 +501,7 @@ export default function TournamentMatchesPage() {
               scoreBasedSchedule={tournamentConfig.matchType === 'score_based'}
               myTeamId={myTeamId}
               template={template}
+              fontScale={fontScale}
               showAllMatches={showAllMatches}
               onToggleFilter={() => setShowAllMatches((v) => !v)}
               onGenerateBatch={
@@ -607,8 +612,13 @@ export default function TournamentMatchesPage() {
         currentIdentity={identity}
         teamsMap={teamsMap}
         template={template}
+        fontScale={fontScale}
         onSelect={setIdentity}
         onClear={clearIdentity}
+        onFontScaleChange={(scale) => {
+          setFontScale(scale)
+          localStorage.setItem('padel_font_scale', scale)
+        }}
       />
     </div>
   )

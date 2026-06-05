@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import type { TeamWithJoueurs, PlayerTemplate } from '../../types/tournament'
+import type { TeamWithJoueurs, PlayerTemplate, FontScale } from '../../types/tournament'
 import type { PlayerIdentity } from '../../hooks/usePlayerIdentity'
 import { getTheme } from '../../lib/templateTheme'
 
@@ -9,8 +9,10 @@ interface PlayerSelectSheetProps {
   currentIdentity: PlayerIdentity | null
   teamsMap: Map<string, TeamWithJoueurs>
   template?: PlayerTemplate
+  fontScale?: FontScale
   onSelect: (joueur: { id: string; prenom: string }) => void
   onClear: () => void
+  onFontScaleChange?: (scale: FontScale) => void
 }
 
 export default function PlayerSelectSheet({
@@ -19,8 +21,10 @@ export default function PlayerSelectSheet({
   currentIdentity,
   teamsMap,
   template,
+  fontScale = 'normal',
   onSelect,
   onClear,
+  onFontScaleChange,
 }: PlayerSelectSheetProps) {
   const [selectedId, setSelectedId] = useState<string | null>(
     currentIdentity?.joueurId ?? null,
@@ -146,6 +150,35 @@ export default function PlayerSelectSheet({
             >
               Se déconnecter
             </button>
+          </div>
+        )}
+
+        {/* Taille du texte */}
+        {onFontScaleChange && (
+          <div className="px-5 mb-4 shrink-0">
+            <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: theme.textMuted }}>
+              Taille du texte
+            </div>
+            <div className="flex gap-2">
+              {([
+                { scale: 'normal' as FontScale, label: 'Normal', size: 'text-sm' },
+                { scale: 'xl' as FontScale, label: 'Grand', size: 'text-base' },
+                { scale: 'xxl' as FontScale, label: 'Très grand', size: 'text-xl' },
+              ]).map(({ scale, label, size }) => (
+                <button
+                  key={scale}
+                  onClick={() => onFontScaleChange(scale)}
+                  className="flex-1 py-2.5 rounded-xl flex flex-col items-center gap-1 transition-all active:scale-95"
+                  style={{
+                    background: fontScale === scale ? theme.accent : theme.itemBg,
+                    color: fontScale === scale ? theme.accentText : theme.textPrimary,
+                  }}
+                >
+                  <span className={`${size} font-black leading-none`}>Aa</span>
+                  <span className="text-[10px] font-medium leading-none">{label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
