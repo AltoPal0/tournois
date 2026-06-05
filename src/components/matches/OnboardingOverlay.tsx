@@ -408,10 +408,9 @@ function SlideHomescreen({ onDone }: { onDone: () => void }) {
               onClick={() => setPlatform(p)}
               style={{
                 clipPath: CLIP_BTN,
-                background: platform === p ? '#D4E800' : 'rgba(255,255,255,0.1)',
+                background: 'rgba(255,255,255,0.1)',
               }}
-              className={`flex-1 py-2.5 text-xs font-black uppercase tracking-wider transition-all
-                ${platform === p ? 'text-[#062E38]' : 'text-white/50'}`}
+              className="flex-1 py-2.5 text-xs font-black uppercase tracking-wider transition-all text-white/50"
             >
               {p === 'ios' ? '🍎 iPhone' : '🤖 Android'}
             </button>

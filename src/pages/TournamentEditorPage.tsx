@@ -30,6 +30,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   const generateMatches = useMatchStore((s) => s.generateMatches)
   const resetScores = useMatchStore((s) => s.resetScores)
   const clearMatches = useMatchStore((s) => s.clearMatches)
+  const activateTournament = useMatchStore((s) => s.activateTournament)
   const isGenerating = useMatchStore((s) => s.isGenerating)
   const matches = useMatchStore((s) => s.matches)
   const loadMatches = useMatchStore((s) => s.loadMatches)
@@ -37,9 +38,27 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   const [showConfigOverlay, setShowConfigOverlay] = useState(false)
   const [showActiveConfirm, setShowActiveConfirm] = useState(false)
   const [showPlayerOverlay, setShowPlayerOverlay] = useState(false)
+  const [isActivating, setIsActivating] = useState(false)
   const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
 
   const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
+
+  const rootNodeIds = useMemo(
+    () => new Set(nodes.filter((n) => !edges.some((e) => e.target === n.id)).map((n) => n.id)),
+    [nodes, edges],
+  )
+
+  const allPlayersAssigned = useMemo(() => {
+    const rootNodes = nodes.filter((n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana')
+    if (rootNodes.length === 0) return false
+    return rootNodes.every((node) => {
+      const phaseMatches = matches.filter((m) => m.phase_node_id === node.id)
+      const required = node.data.config.type === 'round_robin'
+        ? phaseMatches
+        : phaseMatches.filter((m) => m.round === 1)
+      return required.length > 0 && required.every((m) => m.equipe1_id && m.equipe2_id)
+    })
+  }, [matches, nodes, rootNodeIds])
 
   const graph: TournamentGraph = useMemo(() => ({
     nodes: nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
@@ -131,6 +150,13 @@ const isDirty = useTournamentStore((s) => s.isDirty)
     setShowConfirm(false)
   }, [id, nodes, edges, generateMatches, navigate])
 
+  const handleActivate = useCallback(async () => {
+    if (!id) return
+    setIsActivating(true)
+    await activateTournament(id)
+    setIsActivating(false)
+  }, [id, activateTournament])
+
   // Ctrl+S / Cmd+S
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -215,6 +241,25 @@ const isDirty = useTournamentStore((s) => s.isDirty)
                 <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-.293.707L13 10.414V15a1 1 0 01-.553.894l-4 2A1 1 0 017 17v-6.586L3.293 6.707A1 1 0 013 6V4z" clipRule="evenodd" />
               </svg>
               Planning des pistes
+            </button>
+          )}
+
+          {tournamentStatus === 'draft' && matches.length > 0 && allPlayersAssigned && (
+            <button
+              onClick={handleActivate}
+              disabled={isActivating}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
+                transition-all duration-200 disabled:opacity-50
+                bg-amber-400 text-gray-900 hover:bg-amber-300 active:scale-[0.98]"
+            >
+              {isActivating ? (
+                <div className="h-3.5 w-3.5 border-2 border-gray-900/30 border-t-gray-900 rounded-full animate-spin" />
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                </svg>
+              )}
+              Activer le tournoi
             </button>
           )}
 
@@ -321,7 +366,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm mx-4">
             <h3 className="text-base font-semibold text-gray-900 mb-2">Générer les matchs ?</h3>
             <p className="text-sm text-gray-600 mb-5">
-              Les matchs existants seront supprimés et régénérés à partir du design actuel.
+              Les matchs existants seront supprimés et régénérés à partir du design actuel. Les équipes assignées seront perdues — vous devrez les réassigner.
             </p>
             <div className="flex gap-3 justify-end">
               <button

@@ -255,7 +255,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
     for (const node of rootNodes) {
       const { type, inputCount } = node.data.config
-      const pairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
+      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana'>, inputCount, node.data.config.roundCount)
       const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
 
       const slotToTeam = new Map<number, string | null>()
@@ -287,7 +287,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const allUpdates: PromiseLike<unknown>[] = []
     for (const node of rootNodes) {
       const { type, inputCount } = node.data.config
-      const pairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
+      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana'>, inputCount, node.data.config.roundCount)
       const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
 
       for (const pair of pairs) {

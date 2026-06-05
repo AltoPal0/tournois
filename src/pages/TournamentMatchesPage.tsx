@@ -20,7 +20,6 @@ export default function TournamentMatchesPage() {
   const loadMatches = useMatchStore((s) => s.loadMatches)
   const subscribeToMatches = useMatchStore((s) => s.subscribeToMatches)
   const generateMatches = useMatchStore((s) => s.generateMatches)
-  const activateTournament = useMatchStore((s) => s.activateTournament)
   const resetMatches = useMatchStore((s) => s.reset)
 
   const tournamentName = useTournamentStore((s) => s.tournamentName)
@@ -35,7 +34,6 @@ export default function TournamentMatchesPage() {
   const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
   const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false)
-  const [isActivating, setIsActivating] = useState(false)
   const [isBurgerOpen, setIsBurgerOpen] = useState(false)
   // true = tous les matchs (défaut), false = seulement les matchs du joueur
   const [showAllMatches, setShowAllMatches] = useState(true)
@@ -149,33 +147,6 @@ export default function TournamentMatchesPage() {
     setShowAllMatches(true)
   }, [identity?.joueurId])
 
-  const rootNodeIds = useMemo(
-    () => new Set(nodes.filter((n) => !edges.some((e) => e.target === n.id)).map((n) => n.id)),
-    [nodes, edges],
-  )
-
-  function requiredMatchesForType(phaseType: PhaseType, phaseMatches: typeof matches) {
-    if (phaseType === 'round_robin') return phaseMatches
-    return phaseMatches.filter((m) => m.round === 1)
-  }
-
-  const allPlayersAssigned = useMemo(() => {
-    const rootNodes = nodes.filter((n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana')
-    if (rootNodes.length === 0) return false
-    return rootNodes.every((node) => {
-      const phaseMatches = matches.filter((m) => m.phase_node_id === node.id)
-      const required = requiredMatchesForType(node.data.config.type, phaseMatches)
-      return required.length > 0 && required.every((m) => m.equipe1_id && m.equipe2_id)
-    })
-  }, [matches, nodes, rootNodeIds])
-
-  const handleActivate = useCallback(async () => {
-    if (!id) return
-    setIsActivating(true)
-    await activateTournament(id)
-    setIsActivating(false)
-  }, [id, activateTournament])
-
   const handleGenerate = useCallback(async () => {
     if (!id) return
     await generateMatches(id, graph)
@@ -183,7 +154,6 @@ export default function TournamentMatchesPage() {
 
   const activePhase = sortedPhases.find((p) => p.id === activePhaseId) ?? null
   const activePhaseMatches = activePhaseId ? matches.filter((m) => m.phase_node_id === activePhaseId) : []
-  const isDraft = tournamentStatus === 'draft'
   const isActive = tournamentStatus === 'active'
 
   // Identité joueur
@@ -301,27 +271,6 @@ export default function TournamentMatchesPage() {
             </span>
           )}
         </div>
-
-        {/* Bouton Activer — brouillon avec tous les joueurs assignés */}
-        {isDraft && matches.length > 0 && allPlayersAssigned && (
-          <button
-            onClick={handleActivate}
-            disabled={isActivating}
-            className="inline-flex items-center justify-center gap-1.5
-              h-8 px-2.5 rounded-lg text-xs font-bold shrink-0
-              transition-all duration-200 active:scale-[0.98] disabled:opacity-50
-              bg-padel-gold text-navy-900 hover:bg-padel-gold-dark shadow-sm"
-          >
-            {isActivating ? (
-              <div className="h-3.5 w-3.5 border-2 border-navy-900/30 border-t-navy-900 rounded-full animate-spin" />
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-              </svg>
-            )}
-            <span className="hidden sm:inline">Activer</span>
-          </button>
-        )}
 
         {/* Burger menu — navigation entre phases */}
         {sortedPhases.length > 1 && (

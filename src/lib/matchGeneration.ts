@@ -161,6 +161,7 @@ function generateRoundRobinMatches(
         round: tour + 1,
         score_equipe1: null,
         score_equipe2: null,
+        finished_at: null,
       })
       ordre++
     }
@@ -249,6 +250,7 @@ function generateEliminationMatches(
           round,
           score_equipe1: null,
           score_equipe2: null,
+          finished_at: null,
         })
         ordre++
       } else {
@@ -291,6 +293,7 @@ function generateEliminationMatches(
           round,
           score_equipe1: null,
           score_equipe2: null,
+          finished_at: null,
         })
         ordre++
       }
@@ -394,6 +397,7 @@ function generateAmericanoMatches(
         round: r + 1,
         score_equipe1: null,
         score_equipe2: null,
+        finished_at: null,
       })
       ordre++
     }
@@ -430,6 +434,7 @@ function generateMatchSimpleMatches(
       round: 1,
       score_equipe1: null,
       score_equipe2: null,
+      finished_at: null,
     },
   ]
 }
@@ -465,6 +470,7 @@ function generateTournantreLibreMatches(
         round,
         score_equipe1: null,
         score_equipe2: null,
+        finished_at: null,
       })
       ordre++
     }
@@ -734,7 +740,7 @@ function assignScheduleToMatches(
     }
 
     // Assigner pistes et horaires
-    let currentMin = heureDebutMin ?? 0
+    let currentMin: number = heureDebutMin ?? 0
 
     for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
       const batch = batches[batchIdx]

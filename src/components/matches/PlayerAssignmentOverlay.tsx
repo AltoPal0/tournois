@@ -34,6 +34,11 @@ function slotKey(phaseNodeId: string, slot: number): SlotKey {
   return `${phaseNodeId}-${slot}`
 }
 
+function parseSlotKey(key: SlotKey): { phaseNodeId: string; slot: number } {
+  const lastHyphen = key.lastIndexOf('-')
+  return { phaseNodeId: key.substring(0, lastHyphen), slot: parseInt(key.substring(lastHyphen + 1)) }
+}
+
 function buildInitialSlots(
   graph: TournamentGraph,
   matches: Match[],
@@ -220,6 +225,7 @@ export default function PlayerAssignmentOverlay({
   const [allPlayers, setAllPlayers] = useState<Joueur[]>([])
   const [slotPlayers, setSlotPlayers] = useState<Map<SlotKey, SlotPlayers>>(new Map())
   const [pendingSlots, setPendingSlots] = useState<Set<SlotKey>>(new Set())
+  const [swapSourceKey, setSwapSourceKey] = useState<SlotKey | null>(null)
   const [showJsonModal, setShowJsonModal] = useState(false)
   const [jsonText, setJsonText] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
@@ -336,6 +342,35 @@ export default function PlayerAssignmentOverlay({
       void applyAssign(phaseNodeId, slot, position, null)
     },
     [applyAssign],
+  )
+
+  const handleSwap = useCallback(
+    async (targetKey: SlotKey) => {
+      if (!swapSourceKey) return
+      const spSource = slotPlayersRef.current.get(swapSourceKey) ?? { player1Id: null, player2Id: null }
+      const spTarget = slotPlayersRef.current.get(targetKey) ?? { player1Id: null, player2Id: null }
+      setSwapSourceKey(null)
+      setSlotPlayers((prev) => {
+        const next = new Map(prev)
+        next.set(swapSourceKey, spTarget)
+        next.set(targetKey, spSource)
+        return next
+      })
+      const { phaseNodeId: srcNodeId, slot: srcSlot } = parseSlotKey(swapSourceKey)
+      const { phaseNodeId: tgtNodeId, slot: tgtSlot } = parseSlotKey(targetKey)
+      setPendingSlots((prev) => new Set([...prev, swapSourceKey, targetKey]))
+      await Promise.all([
+        assignPlayersToSlot(tournamentId, srcNodeId, srcSlot, spTarget.player1Id, spTarget.player2Id),
+        assignPlayersToSlot(tournamentId, tgtNodeId, tgtSlot, spSource.player1Id, spSource.player2Id),
+      ])
+      setPendingSlots((prev) => {
+        const next = new Set(prev)
+        next.delete(swapSourceKey)
+        next.delete(targetKey)
+        return next
+      })
+    },
+    [swapSourceKey, assignPlayersToSlot, tournamentId],
   )
 
   const handleClearAll = useCallback(async () => {
@@ -468,6 +503,27 @@ export default function PlayerAssignmentOverlay({
     onAssignmentChanged()
   }, [jsonText, rootNodes, assignPlayersToSlot, tournamentId, graph, onAssignmentChanged])
 
+  const handleExportJson = useCallback(() => {
+    const teams: { player1: string; player2: string }[] = []
+    for (const node of rootNodes) {
+      for (let s = 1; s <= node.data.config.inputCount; s++) {
+        const key = slotKey(node.id, s)
+        const sp = slotPlayers.get(key) ?? { player1Id: null, player2Id: null }
+        const p1 = sp.player1Id ? allPlayers.find((p) => p.id === sp.player1Id) : null
+        const p2 = sp.player2Id ? allPlayers.find((p) => p.id === sp.player2Id) : null
+        teams.push({ player1: p1?.prenom ?? '', player2: p2?.prenom ?? '' })
+      }
+    }
+    const json = JSON.stringify({ teams }, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'equipes.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [rootNodes, slotPlayers, allPlayers])
+
   const handleConfirm = () => {
     onAssignmentChanged()
     onClose()
@@ -525,6 +581,19 @@ export default function PlayerAssignmentOverlay({
             <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
           </svg>
           Importer JSON
+        </button>
+
+        <button
+          onClick={handleExportJson}
+          disabled={isAssigning || filledSlots === 0}
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium
+            border border-gray-200 text-gray-600 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-600
+            transition-all duration-200 disabled:opacity-40"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM10 3a1 1 0 011 1v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L9 11.586V4a1 1 0 011-1z" clipRule="evenodd" />
+          </svg>
+          Exporter JSON
         </button>
 
         <button
@@ -706,16 +775,23 @@ export default function PlayerAssignmentOverlay({
                       const sp = slotPlayers.get(key) ?? { player1Id: null, player2Id: null }
                       const isPending = pendingSlots.has(key)
                       const isComplete = sp.player1Id !== null && sp.player2Id !== null
+                      const isSwapSource = swapSourceKey === key
+                      const isSwapTarget = swapSourceKey !== null && swapSourceKey !== key && isComplete
 
                       return (
                         <div
                           key={slot}
                           className={`rounded-xl border p-3 space-y-2 transition-all duration-200
-                            ${isComplete
+                            ${isSwapSource
+                              ? 'border-amber-300 bg-amber-50/40'
+                              : isSwapTarget
+                              ? 'border-green-300 bg-green-50/30'
+                              : isComplete
                               ? 'border-blue-200 bg-blue-50/30'
                               : 'border-gray-200 bg-white'
                             }
                             ${isPending ? 'opacity-50 pointer-events-none' : ''}
+                            ${swapSourceKey !== null && !isComplete && !isSwapSource ? 'opacity-40' : ''}
                           `}
                         >
                           <div className="flex items-center justify-between mb-0.5">
@@ -724,10 +800,36 @@ export default function PlayerAssignmentOverlay({
                             </span>
                             {isPending ? (
                               <div className="h-3 w-3 border-2 border-blue-300/40 border-t-blue-500 rounded-full animate-spin" />
+                            ) : isSwapSource ? (
+                              <button
+                                onClick={() => setSwapSourceKey(null)}
+                                title="Annuler l'échange"
+                                className="h-5 w-5 rounded-full bg-amber-400 hover:bg-amber-500 flex items-center justify-center transition-colors"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                            ) : isSwapTarget ? (
+                              <button
+                                onClick={() => void handleSwap(key)}
+                                title="Échanger ces deux équipes"
+                                className="h-5 w-5 rounded-full bg-green-100 hover:bg-green-500 text-green-600 hover:text-white flex items-center justify-center transition-colors group"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8zM12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 10-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" />
+                                </svg>
+                              </button>
                             ) : isComplete ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
+                              <button
+                                onClick={() => setSwapSourceKey(key)}
+                                title="Interchanger cette équipe"
+                                className="h-5 w-5 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center transition-colors"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </button>
                             ) : null}
                           </div>
 
