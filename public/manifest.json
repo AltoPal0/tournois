@@ -1,6 +1,6 @@
 {
-  "name": "Tournois de Padel",
-  "short_name": "Padel",
+  "name": "The Tournoi",
+  "short_name": "The Tournoi",
   "description": "Gestion de tournois de padel",
   "start_url": "/steph",
   "display": "standalone",

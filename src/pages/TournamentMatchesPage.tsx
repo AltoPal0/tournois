@@ -8,6 +8,7 @@ import PhaseSection from '../components/matches/PhaseSection'
 import PlayerAssignmentOverlay from '../components/matches/PlayerAssignmentOverlay'
 import PlayerSelectSheet from '../components/matches/PlayerSelectSheet'
 import NextMatchBanner from '../components/matches/NextMatchBanner'
+import OnboardingOverlay from '../components/matches/OnboardingOverlay'
 import { topologicalSort } from '../lib/matchGeneration'
 import { usePlayerIdentity } from '../hooks/usePlayerIdentity'
 import { usePullToRefresh, PULL_THRESHOLD } from '../hooks/usePullToRefresh'
@@ -40,6 +41,9 @@ export default function TournamentMatchesPage() {
   const [isBurgerOpen, setIsBurgerOpen] = useState(false)
   // true = tous les matchs (défaut), false = seulement les matchs du joueur
   const [showAllMatches, setShowAllMatches] = useState(true)
+  const [showOnboarding, setShowOnboarding] = useState(() =>
+    id ? !localStorage.getItem(`padel_onboarded_${id}`) : false
+  )
 
   const { identity, setIdentity, clearIdentity, findMyTeam } = usePlayerIdentity(id ?? '')
 
@@ -491,6 +495,19 @@ export default function TournamentMatchesPage() {
           </div>
         ) : null}
       </div>
+
+      {/* Onboarding première visite */}
+      {showOnboarding && id && (
+        <OnboardingOverlay
+          tournamentId={id}
+          tournamentName={tournamentName ?? ''}
+          teamsMap={teamsMap}
+          onComplete={(joueur) => {
+            if (joueur) setIdentity(joueur)
+            setShowOnboarding(false)
+          }}
+        />
+      )}
 
       {/* Burger — navigation entre phases */}
       {isBurgerOpen && (
