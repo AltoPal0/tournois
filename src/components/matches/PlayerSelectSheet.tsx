@@ -1,12 +1,14 @@
 import { useMemo, useState, useEffect } from 'react'
-import type { TeamWithJoueurs } from '../../types/tournament'
+import type { TeamWithJoueurs, PlayerTemplate } from '../../types/tournament'
 import type { PlayerIdentity } from '../../hooks/usePlayerIdentity'
+import { getTheme } from '../../lib/templateTheme'
 
 interface PlayerSelectSheetProps {
   isOpen: boolean
   onClose: () => void
   currentIdentity: PlayerIdentity | null
   teamsMap: Map<string, TeamWithJoueurs>
+  template?: PlayerTemplate
   onSelect: (joueur: { id: string; prenom: string }) => void
   onClear: () => void
 }
@@ -16,6 +18,7 @@ export default function PlayerSelectSheet({
   onClose,
   currentIdentity,
   teamsMap,
+  template,
   onSelect,
   onClear,
 }: PlayerSelectSheetProps) {
@@ -24,6 +27,7 @@ export default function PlayerSelectSheet({
   )
   const [search, setSearch] = useState('')
   const [keyboardOffset, setKeyboardOffset] = useState(0)
+  const theme = getTheme(template)
 
   // Remonte la feuille quand le clavier apparaît (iOS ne resize pas le viewport)
   useEffect(() => {
@@ -99,24 +103,24 @@ export default function PlayerSelectSheet({
 
       {/* Sheet */}
       <div
-        className={`fixed left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl
+        className={`fixed left-0 right-0 z-50 shadow-2xl
           flex flex-col max-h-[85svh]
           transition-[transform,bottom] duration-300 ease-out
           ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
-        style={{ bottom: keyboardOffset }}
+        style={{ bottom: keyboardOffset, background: theme.bg, borderRadius: '24px 24px 0 0' }}
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1 shrink-0">
-          <div className="w-10 h-1 bg-gray-200 rounded-full" />
+          <div className="w-10 h-1 rounded-full" style={{ background: theme.divider }} />
         </div>
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 shrink-0">
-          <h2 className="text-lg font-black text-navy-900">Qui es-tu ?</h2>
+          <h2 className="text-lg font-black" style={{ color: theme.textPrimary }}>Qui es-tu ?</h2>
           <button
             onClick={onClose}
-            className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center
-              text-gray-500 hover:bg-gray-200 transition-colors"
+            className="h-8 w-8 rounded-full flex items-center justify-center transition-colors"
+            style={{ background: theme.inputBg, color: theme.textSecondary }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -126,18 +130,19 @@ export default function PlayerSelectSheet({
 
         {/* Identité actuelle */}
         {currentIdentity && (
-          <div className="mx-5 mb-3 px-3 py-2 bg-padel-gold/10 rounded-xl flex items-center justify-between shrink-0">
+          <div className="mx-5 mb-3 px-3 py-2 rounded-xl flex items-center justify-between shrink-0" style={{ background: theme.itemBgActive }}>
             <div className="flex items-center gap-2">
-              <div className="h-6 w-6 rounded-full bg-padel-gold flex items-center justify-center">
-                <span className="text-navy-900 text-[10px] font-black">
+              <div className="h-6 w-6 rounded-full flex items-center justify-center" style={{ background: theme.accent }}>
+                <span className="text-[10px] font-black" style={{ color: theme.accentText }}>
                   {currentIdentity.prenom.slice(0, 2).toUpperCase()}
                 </span>
               </div>
-              <span className="text-sm font-semibold text-navy-900">{currentIdentity.prenom}</span>
+              <span className="text-sm font-semibold" style={{ color: theme.textPrimary }}>{currentIdentity.prenom}</span>
             </div>
             <button
               onClick={handleClear}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium"
+              className="text-xs font-medium transition-colors"
+              style={{ color: theme.textMuted }}
             >
               Se déconnecter
             </button>
@@ -151,28 +156,26 @@ export default function PlayerSelectSheet({
             placeholder="Rechercher..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-200
-              text-navy-900 placeholder-gray-400
-              focus:outline-none focus:border-padel-blue focus:bg-white transition-colors"
-            style={{ fontSize: '16px' }}
+            className="w-full h-10 px-3 rounded-xl outline-none transition-colors"
+            style={{ background: theme.inputBg, color: theme.textPrimary, fontSize: '16px' }}
           />
         </div>
 
         {/* Liste joueurs */}
         <div className="flex-1 overflow-y-auto px-5 pb-2 min-h-0">
           {filtered.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-8">Aucun joueur trouvé</p>
+            <p className="text-center text-sm py-8" style={{ color: theme.textMuted }}>Aucun joueur trouvé</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {filtered.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => setSelectedId(p.id === selectedId ? null : p.id)}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-150 active:scale-95
-                    ${p.id === selectedId
-                      ? 'bg-padel-blue text-white shadow-sm shadow-padel-blue/30'
-                      : 'bg-gray-100 text-navy-900 hover:bg-gray-200'
-                    }`}
+                  className="px-4 py-2 rounded-full text-sm font-semibold transition-all duration-150 active:scale-95"
+                  style={{
+                    background: p.id === selectedId ? theme.accent : theme.itemBg,
+                    color: p.id === selectedId ? theme.accentText : theme.textPrimary,
+                  }}
                 >
                   {p.prenom}
                 </button>
@@ -186,12 +189,11 @@ export default function PlayerSelectSheet({
           <button
             onClick={handleConfirm}
             disabled={!selectedPlayer}
-            className={`w-full h-14 rounded-2xl text-base font-bold transition-all duration-150
-              flex items-center justify-center
-              ${selectedPlayer
-                ? 'bg-padel-blue text-white shadow-md shadow-padel-blue/25 active:scale-[0.98]'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
+            className="w-full h-14 rounded-2xl text-base font-bold transition-all duration-150 flex items-center justify-center disabled:opacity-40 active:scale-[0.98]"
+            style={{
+              background: selectedPlayer ? theme.accent : theme.itemBg,
+              color: selectedPlayer ? theme.accentText : theme.textMuted,
+            }}
           >
             {selectedPlayer ? `Je suis ${selectedPlayer.prenom}` : 'Sélectionne ton prénom'}
           </button>

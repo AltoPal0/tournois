@@ -25,6 +25,7 @@ function createDefaultOutputs(type: PhaseType): PhaseOutput[] {
     tournante_libre: { count: 2, labels: ['1er', '2ème'] },
     match_simple: { count: 2, labels: ['Vainqueur', 'Perdant'] },
     americano: { count: 2, labels: ['1er', '2ème'] },
+    americana_single: { count: 3, labels: ['1er', '2ème', '3ème'] },
   }
   const { count, labels } = configs[type]
   return Array.from({ length: count }, (_, i) => ({
@@ -42,6 +43,7 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     tournante_libre: 'Tournante libre',
     match_simple: 'Match',
     americano: 'Américano',
+    americana_single: 'Americana Single',
   }
   const inputCounts: Record<PhaseType, number> = {
     round_robin: 4,
@@ -50,6 +52,7 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     tournante_libre: 10,
     match_simple: 2,
     americano: 6,
+    americana_single: 8,
   }
   return {
     name: names[type],
@@ -58,6 +61,7 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     outputs: createDefaultOutputs(type),
     setsCount: 1 as const,
     roundCount: type === 'tournante_libre' || type === 'americano' ? 3 : undefined,
+    playerNames: type === 'americana_single' ? '' : undefined,
   }
 }
 

@@ -46,7 +46,7 @@ function buildInitialSlots(
 ): Map<SlotKey, SlotPlayers> {
   const state = new Map<SlotKey, SlotPlayers>()
   const rootNodes = graph.nodes.filter(
-    (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana',
+    (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
   )
 
   for (const node of rootNodes) {
@@ -238,7 +238,7 @@ export default function PlayerAssignmentOverlay({
   }, [slotPlayers])
 
   const rootNodes = graph.nodes.filter(
-    (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana',
+    (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
   )
 
   // Charger les joueurs (filtrés par inscrits si défini, avec création auto des manquants)

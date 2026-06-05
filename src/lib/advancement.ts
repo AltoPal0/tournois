@@ -31,7 +31,7 @@ export function computeAdvancements(
   const config = node.data.config
   const phaseMatches = allMatches.filter((m) => m.phase_node_id === phaseNodeId)
 
-  if (config.type === 'round_robin' || config.type === 'tournante_libre' || config.type === 'americano') {
+  if (config.type === 'round_robin' || config.type === 'tournante_libre' || config.type === 'americano' || config.type === 'americana_single') {
     advanceFromRoundRobin(phaseMatches, node, allMatches, updates)
   } else if (config.type === 'elimination') {
     advanceFromElimination(completedMatch, phaseMatches, node, allMatches, updates)
@@ -198,7 +198,8 @@ export function computeAdvancementResets(
     config.type === 'round_robin' ||
     config.type === 'americano' ||
     config.type === 'tournante_libre' ||
-    config.type === 'match_simple'
+    config.type === 'match_simple' ||
+    config.type === 'americana_single'
   ) {
     // Cherche les slots cross-phase remplis via les output labels de cette phase
     for (const output of config.outputs) {

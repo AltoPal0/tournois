@@ -38,6 +38,12 @@ const phaseTypes: { type: PhaseType; label: string; description: string; color: 
     description: 'Rotation sans doublons',
     color: 'border-amber-200 bg-amber-50 text-amber-700',
   },
+  {
+    type: 'americana_single',
+    label: 'Americana Single',
+    description: 'Joueurs individuels, matchs à la volée',
+    color: 'border-teal-200 bg-teal-50 text-teal-700',
+  },
 ]
 
 export default function Sidebar({ onOpenConfig }: { onOpenConfig?: () => void }) {

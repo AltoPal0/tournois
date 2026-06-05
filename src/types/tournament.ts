@@ -1,4 +1,4 @@
-export type PhaseType = 'round_robin' | 'elimination' | 'super_americana' | 'tournante_libre' | 'match_simple' | 'americano'
+export type PhaseType = 'round_robin' | 'elimination' | 'super_americana' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single'
 
 export interface PhaseOutput {
   id: string
@@ -16,6 +16,9 @@ export interface PhaseConfig {
   heureDebut?: string
   dureeMatch?: number
   matchType?: 'time_fixed' | 'score_based'
+  playerNames?: string
+  livePlayerManagement?: boolean
+  restingPlayerIds?: string[]
 }
 
 export type PlayerTemplate = 'default' | 'slick-dark' | 'palm-springs' | 'green-turf'

@@ -21,6 +21,12 @@ const typeStyles = {
     selectedRing: 'ring-emerald-500',
     label: 'Super Americana',
   },
+  americana_single: {
+    badge: 'bg-teal-100 text-teal-700',
+    border: 'border-teal-200',
+    selectedRing: 'ring-teal-500',
+    label: 'Americana Single',
+  },
   tournante_libre: {
     badge: 'bg-violet-100 text-violet-700',
     border: 'border-violet-200',

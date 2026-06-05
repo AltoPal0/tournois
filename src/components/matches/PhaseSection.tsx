@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Match, PhaseType, TeamWithJoueurs, PlayerTemplate } from '../../types/tournament'
 import { computeStandings } from '../../lib/standings'
+import { computeAmericanaSingleStandings } from '../../lib/americanaSingleStandings'
 import StandingsTable from './StandingsTable'
 import ScoreInput from './ScoreInput'
 
@@ -26,6 +27,7 @@ function formatHoraire(horaire: string | null): string | null {
 function getRoundLabel(type: PhaseType, round: number | null, matches: Match[]): string {
   if (type === 'round_robin') return `Tour ${round ?? '?'}`
   if (type === 'tournante_libre') return `Round ${round ?? '?'}`
+  if (type === 'americana_single') return `Match ${matches[0]?.ordre ?? round ?? '?'}`
   const first = matches[0]
   if (first) {
     const nom = first.nom
@@ -384,6 +386,7 @@ interface PhaseSectionProps {
   matches: Match[]
   displayMatches?: Match[]
   teamsMap: Map<string, TeamWithJoueurs>
+  playersMap?: Map<string, string>
   isActive?: boolean
   sameDay?: boolean
   scoreBasedSchedule?: boolean
@@ -391,6 +394,8 @@ interface PhaseSectionProps {
   template?: PlayerTemplate
   showAllMatches?: boolean
   onToggleFilter?: () => void
+  onGenerateBatch?: () => void
+  isGeneratingBatch?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -402,18 +407,26 @@ export default function PhaseSection({
   matches,
   displayMatches,
   teamsMap,
+  playersMap,
   isActive = false,
   scoreBasedSchedule,
   myTeamId,
   template = 'default',
   showAllMatches = true,
   onToggleFilter,
+  onGenerateBatch,
+  isGeneratingBatch = false,
 }: PhaseSectionProps) {
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
 
   const standings = useMemo(
-    () => (type === 'round_robin' || type === 'tournante_libre' ? computeStandings(matches) : []),
+    () => (type === 'round_robin' || type === 'tournante_libre' || type === 'americano' ? computeStandings(matches) : []),
     [type, matches],
+  )
+
+  const individualStandings = useMemo(
+    () => (type === 'americana_single' ? computeAmericanaSingleStandings(matches, teamsMap) : []),
+    [type, matches, teamsMap],
   )
 
   const matchesToShow = displayMatches ?? matches
@@ -535,9 +548,44 @@ export default function PhaseSection({
 
   return (
     <section>
-      {(type === 'round_robin' || type === 'tournante_libre') && (
+      {(type === 'round_robin' || type === 'tournante_libre' || type === 'americano') && standings.length > 0 && (
         <div className="mb-4">
           <StandingsTable standings={standings} teamsMap={teamsMap} template={template} />
+        </div>
+      )}
+
+      {type === 'americana_single' && individualStandings.length > 0 && (
+        <div className="mb-4">
+          <div className="overflow-x-auto rounded-xl border border-gray-100">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50 text-gray-400 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left">#</th>
+                  <th className="px-3 py-2 text-left">Joueur</th>
+                  <th className="px-3 py-2 text-center">J</th>
+                  <th className="px-3 py-2 text-center">V</th>
+                  <th className="px-3 py-2 text-center">Pts</th>
+                  <th className="px-3 py-2 text-center">+/-</th>
+                </tr>
+              </thead>
+              <tbody>
+                {individualStandings.map((row, idx) => (
+                  <tr key={row.playerId} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                    <td className="px-3 py-2 text-gray-400 font-medium">{idx + 1}</td>
+                    <td className="px-3 py-2 font-semibold text-gray-800">
+                      {playersMap?.get(row.playerId) ?? row.playerId.slice(0, 8)}
+                    </td>
+                    <td className="px-3 py-2 text-center text-gray-500">{row.played}</td>
+                    <td className="px-3 py-2 text-center text-gray-500">{row.wins}</td>
+                    <td className="px-3 py-2 text-center font-bold text-teal-700">{row.points}</td>
+                    <td className="px-3 py-2 text-center text-gray-500">
+                      {row.gamesWon - row.gamesLost > 0 ? '+' : ''}{row.gamesWon - row.gamesLost}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -553,6 +601,31 @@ export default function PhaseSection({
           </div>
         </div>
       ))}
+
+      {type === 'americana_single' &&
+        isActive &&
+        matches.length > 0 &&
+        matches.every((m) => m.statut === 'termine') &&
+        onGenerateBatch && (
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={onGenerateBatch}
+              disabled={isGeneratingBatch}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold
+                bg-padel-blue text-white hover:bg-padel-blue-light transition-all duration-200
+                active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-padel-blue/25"
+            >
+              {isGeneratingBatch ? (
+                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                </svg>
+              )}
+              {isGeneratingBatch ? 'Génération…' : 'Générer 3 nouveaux matchs'}
+            </button>
+          </div>
+        )}
 
       {scoringMatch && (
         <ScoreInput

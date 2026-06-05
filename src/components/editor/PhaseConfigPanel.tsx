@@ -9,6 +9,7 @@ const phaseTypeOptions: { value: PhaseType; label: string }[] = [
   { value: 'tournante_libre', label: 'Tournante libre (Suisse)' },
   { value: 'match_simple', label: 'Match simple' },
   { value: 'americano', label: 'Américano' },
+  { value: 'americana_single', label: 'Americana Single (individuel)' },
 ]
 
 export default function PhaseConfigPanel() {
@@ -111,7 +112,7 @@ function PanelContent({
         </select>
       </div>
 
-      {/* Nombre de rounds (tournante_libre et americano) */}
+      {/* Nombre de rounds (tournante_libre et americano uniquement) */}
       {(config.type === 'tournante_libre' || config.type === 'americano') && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Nombre de rounds</label>
@@ -209,8 +210,8 @@ function PanelContent({
         </div>
       </div>
 
-      {/* Input count (caché pour match_simple, toujours 2) */}
-      {config.type !== 'match_simple' && (
+      {/* Input count */}
+      {config.type !== 'match_simple' && config.type !== 'americana_single' && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">
             Nombre d'équipes (entrées)
@@ -229,6 +230,62 @@ function PanelContent({
               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
               transition-shadow duration-150"
           />
+        </div>
+      )}
+
+      {/* Joueurs en CSV (americana_single) */}
+      {config.type === 'americana_single' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Joueurs (séparés par des virgules)
+          </label>
+          <textarea
+            rows={3}
+            value={config.playerNames ?? ''}
+            placeholder="Alice, Bob, Carlos, Diana, Emma, Félix"
+            onChange={(e) => {
+              const names = e.target.value
+              const count = names.split(',').map((s) => s.trim()).filter(Boolean).length
+              updatePhaseConfig(nodeId, { playerNames: names, inputCount: count })
+            }}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none
+              focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent
+              transition-shadow duration-150 font-mono"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            {(() => {
+              const count = (config.playerNames ?? '').split(',').map((s) => s.trim()).filter(Boolean).length
+              return count > 0 ? `${count} joueur${count > 1 ? 's' : ''}` : 'Aucun joueur'
+            })()}
+          </p>
+        </div>
+      )}
+
+      {/* Modification joueurs live (americana_single) */}
+      {config.type === 'americana_single' && (
+        <div className="flex items-start justify-between gap-3 py-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-xs font-medium text-gray-500">Modification joueurs live</span>
+            <div className="group relative shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400 cursor-help" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 rounded-lg bg-gray-900 text-white text-[11px] leading-relaxed
+                opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50 shadow-xl">
+                Permet aux joueurs d'être mis en pause, retirés ou ajoutés pendant le tournoi sans affecter le classement. Un joueur en repos ne participe plus aux rotations mais reste dans le classement.
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => updatePhaseConfig(nodeId, { livePlayerManagement: !config.livePlayerManagement })}
+            className={`relative shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200
+              ${config.livePlayerManagement ? 'bg-teal-500' : 'bg-gray-200'}`}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200
+                ${config.livePlayerManagement ? 'translate-x-4.5' : 'translate-x-0.5'}`}
+            />
+          </button>
         </div>
       )}
 

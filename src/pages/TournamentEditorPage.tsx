@@ -51,15 +51,26 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   )
 
   const allPlayersAssigned = useMemo(() => {
-    const rootNodes = nodes.filter((n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana')
-    if (rootNodes.length === 0) return false
-    return rootNodes.every((node) => {
+    const regularRootNodes = nodes.filter(
+      (n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
+    )
+    const americanaSingleNodes = nodes.filter(
+      (n) => rootNodeIds.has(n.id) && n.data.config.type === 'americana_single',
+    )
+    if (regularRootNodes.length === 0 && americanaSingleNodes.length === 0) return false
+
+    const regularOk = regularRootNodes.length === 0 || regularRootNodes.every((node) => {
       const phaseMatches = matches.filter((m) => m.phase_node_id === node.id)
       const required = node.data.config.type === 'round_robin'
         ? phaseMatches
         : phaseMatches.filter((m) => m.round === 1)
       return required.length > 0 && required.every((m) => m.equipe1_id && m.equipe2_id)
     })
+    const americanaOk = americanaSingleNodes.every((n) => {
+      const count = (n.data.config.playerNames ?? '').split(',').map((s) => s.trim()).filter(Boolean).length
+      return count >= 4
+    })
+    return regularOk && americanaOk
   }, [matches, nodes, rootNodeIds])
 
   const graph: TournamentGraph = useMemo(() => ({
@@ -98,7 +109,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
 
   const canViewSchedule =
     (tournamentConfig.pistes?.length ?? 0) > 0 &&
-    matches.some((m) => m.horaire != null)
+    matches.some((m) => m.horaire != null || m.piste != null)
 
   useEffect(() => {
     if (id) {
@@ -256,7 +267,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
             </button>
           )}
 
-          {tournamentStatus === 'draft' && matches.length > 0 && allPlayersAssigned && (
+          {tournamentStatus === 'draft' && (matches.length > 0 || nodes.some((n) => n.data.config.type === 'americana_single')) && allPlayersAssigned && (
             <button
               onClick={handleConfigure}
               disabled={isConfiguring}

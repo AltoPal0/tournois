@@ -8,6 +8,7 @@ import PhaseSection from '../components/matches/PhaseSection'
 import PlayerSelectSheet from '../components/matches/PlayerSelectSheet'
 import NextMatchBanner from '../components/matches/NextMatchBanner'
 import OnboardingOverlay from '../components/matches/OnboardingOverlay'
+import AmericanaSingleRosterOverlay from '../components/matches/AmericanaSingleRosterOverlay'
 import { topologicalSort } from '../lib/matchGeneration'
 import { usePlayerIdentity } from '../hooks/usePlayerIdentity'
 import { usePullToRefresh, PULL_THRESHOLD } from '../hooks/usePullToRefresh'
@@ -20,6 +21,9 @@ export default function TournamentMatchesPage() {
   const loadMatches = useMatchStore((s) => s.loadMatches)
   const subscribeToMatches = useMatchStore((s) => s.subscribeToMatches)
   const generateMatches = useMatchStore((s) => s.generateMatches)
+  const generateAmericanaSingleBatch = useMatchStore((s) => s.generateAmericanaSingleBatch)
+  const isGeneratingBatch = useMatchStore((s) => s.isGeneratingBatch)
+  const updateAmericanaSingleRoster = useMatchStore((s) => s.updateAmericanaSingleRoster)
   const resetMatches = useMatchStore((s) => s.reset)
 
   const tournamentName = useTournamentStore((s) => s.tournamentName)
@@ -32,6 +36,7 @@ export default function TournamentMatchesPage() {
   const edges = useTournamentStore((s) => s.edges)
 
   const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
+  const [playersMap, setPlayersMap] = useState<Map<string, string>>(new Map())
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
   const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false)
   const [isBurgerOpen, setIsBurgerOpen] = useState(false)
@@ -41,6 +46,8 @@ export default function TournamentMatchesPage() {
     id ? !localStorage.getItem(`padel_onboarded_${id}`) : false
   )
   const [teamsLoaded, setTeamsLoaded] = useState(false)
+  const [extraPlayers, setExtraPlayers] = useState<{ id: string; prenom: string }[]>([])
+  const [isRosterOpen, setIsRosterOpen] = useState(false)
   const onboardingCheckDone = useRef(false)
 
   const { identity, setIdentity, clearIdentity, findMyTeam } = usePlayerIdentity(id ?? '')
@@ -83,6 +90,13 @@ export default function TournamentMatchesPage() {
         map.set(t.id, t)
       }
       setTeamsMap(map)
+      // Construire playersMap depuis les équipes (utile pour americana_single)
+      const pm = new Map<string, string>()
+      for (const t of data as unknown as TeamWithJoueurs[]) {
+        pm.set(t.joueur1.id, t.joueur1.prenom)
+        pm.set(t.joueur2.id, t.joueur2.prenom)
+      }
+      setPlayersMap(pm)
     }
     setTeamsLoaded(true)
   }, [id])
@@ -90,6 +104,43 @@ export default function TournamentMatchesPage() {
   useEffect(() => {
     fetchTeams()
   }, [fetchTeams])
+
+  // Résoudre les joueurs des phases americana_single pour l'onboarding
+  useEffect(() => {
+    if (nodes.length === 0) return
+    const names = nodes
+      .filter((n) => n.data.config.type === 'americana_single' && n.data.config.playerNames)
+      .flatMap((n) =>
+        (n.data.config.playerNames ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
+      )
+    if (names.length === 0) return
+    supabase
+      .from('tt_joueurs')
+      .select('id, prenom')
+      .in('prenom', names)
+      .then(({ data }) => {
+        if (data) setExtraPlayers(data as { id: string; prenom: string }[])
+      })
+  }, [nodes])
+
+  // Fusionner extraPlayers dans playersMap pour les standings americana_single
+  useEffect(() => {
+    if (extraPlayers.length === 0) return
+    setPlayersMap((prev) => {
+      const updated = new Map(prev)
+      for (const p of extraPlayers) updated.set(p.id, p.prenom)
+      return updated
+    })
+  }, [extraPlayers])
+
+  // Rafraîchir teamsMap quand de nouveaux matchs avec des équipes inconnues arrivent
+  useEffect(() => {
+    if (matches.length === 0) return
+    const ids = matches.flatMap((m) => [m.equipe1_id, m.equipe2_id]).filter(Boolean) as string[]
+    const hasUnknown = ids.some((id) => !teamsMap.has(id))
+    if (hasUnknown) fetchTeams()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches])
 
   // Si les matchs existent mais aucune équipe n'est assignée → tournoi redémarré → réafficher l'onboarding
   useEffect(() => {
@@ -272,19 +323,37 @@ export default function TournamentMatchesPage() {
           )}
         </div>
 
-        {/* Burger menu — navigation entre phases */}
-        {sortedPhases.length > 1 && (
-          <button
-            onClick={() => setIsBurgerOpen(true)}
-            className="shrink-0 h-8 w-8 flex items-center justify-center rounded-lg
-              transition-all duration-150 active:scale-90 bg-white/10 hover:bg-white/20"
-            aria-label="Navigation phases"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        )}
+        {/* Icônes droite */}
+        <div className="flex items-center gap-1">
+          {/* Engrenage roster americana_single */}
+          {isActive && activePhase?.type === 'americana_single' &&
+            nodes.find((n) => n.id === activePhase.id)?.data.config.livePlayerManagement && (
+            <button
+              onClick={() => setIsRosterOpen(true)}
+              className="shrink-0 h-8 w-8 flex items-center justify-center rounded-lg
+                transition-all duration-150 active:scale-90 bg-white/10 hover:bg-white/20"
+              aria-label="Gestion des joueurs"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+              </svg>
+            </button>
+          )}
+
+          {/* Burger menu — navigation entre phases */}
+          {sortedPhases.length > 1 && (
+            <button
+              onClick={() => setIsBurgerOpen(true)}
+              className="shrink-0 h-8 w-8 flex items-center justify-center rounded-lg
+                transition-all duration-150 active:scale-90 bg-white/10 hover:bg-white/20"
+              aria-label="Navigation phases"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
       </div>
 
@@ -406,6 +475,7 @@ export default function TournamentMatchesPage() {
               matches={activePhaseMatches}
               displayMatches={displayMatches}
               teamsMap={teamsMap}
+              playersMap={playersMap}
               isActive={isActive}
               sameDay={tournamentConfig.sameDay}
               scoreBasedSchedule={tournamentConfig.matchType === 'score_based'}
@@ -413,10 +483,37 @@ export default function TournamentMatchesPage() {
               template={template}
               showAllMatches={showAllMatches}
               onToggleFilter={() => setShowAllMatches((v) => !v)}
+              onGenerateBatch={
+                activePhase.type === 'americana_single'
+                  ? () => generateAmericanaSingleBatch(activePhase.id)
+                  : undefined
+              }
+              isGeneratingBatch={activePhase.type === 'americana_single' ? isGeneratingBatch : false}
             />
           </div>
         ) : null}
       </div>
+
+      {/* Roster americana_single */}
+      {isRosterOpen && activePhase?.type === 'americana_single' && (() => {
+        const phaseNode = nodes.find((n) => n.id === activePhase.id)
+        const restingPlayerIds = phaseNode?.data.config.restingPlayerIds ?? []
+        return (
+          <AmericanaSingleRosterOverlay
+            players={extraPlayers.length > 0 ? extraPlayers : Array.from(playersMap.entries()).map(([id, prenom]) => ({ id, prenom }))}
+            restingPlayerIds={restingPlayerIds}
+            template={template}
+            onClose={() => setIsRosterOpen(false)}
+            onToggleRest={(playerId) => {
+              const next = restingPlayerIds.includes(playerId)
+                ? restingPlayerIds.filter((id) => id !== playerId)
+                : [...restingPlayerIds, playerId]
+              updateAmericanaSingleRoster(activePhase.id, next)
+            }}
+            onAddPlayer={(name) => updateAmericanaSingleRoster(activePhase.id, restingPlayerIds, name)}
+          />
+        )
+      })()}
 
       {/* Onboarding première visite */}
       {showOnboarding && id && (
@@ -425,6 +522,8 @@ export default function TournamentMatchesPage() {
           tournamentName={tournamentName ?? ''}
           teamsMap={teamsMap}
           teamsLoaded={teamsLoaded}
+          extraPlayers={extraPlayers}
+          template={template}
           onComplete={(joueur) => {
             if (joueur) setIdentity(joueur)
             setShowOnboarding(false)
@@ -491,6 +590,7 @@ export default function TournamentMatchesPage() {
         onClose={() => setIsPlayerSheetOpen(false)}
         currentIdentity={identity}
         teamsMap={teamsMap}
+        template={template}
         onSelect={setIdentity}
         onClear={clearIdentity}
       />

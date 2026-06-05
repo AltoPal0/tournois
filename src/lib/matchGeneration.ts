@@ -489,7 +489,7 @@ function generateTournantreLibreMatches(
  * sont retournés (round robin: tous, élimination: round 1 uniquement).
  */
 export function computeInputSlotPairs(
-  phaseType: 'round_robin' | 'elimination' | 'tournante_libre' | 'match_simple' | 'americano',
+  phaseType: 'round_robin' | 'elimination' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single',
   inputCount: number,
   roundCount?: number,
 ): { ordre: number; slot1: number; slot2: number }[] {
@@ -497,6 +497,10 @@ export function computeInputSlotPairs(
 
   if (phaseType === 'match_simple') {
     return [{ ordre: 1, slot1: 1, slot2: 2 }]
+  }
+
+  if (phaseType === 'americana_single') {
+    return []
   }
 
   if (phaseType === 'americano') {
@@ -620,6 +624,7 @@ function assignScheduleToMatches(
   const byDepth = new Map<number, string[]>()
   for (const node of graph.nodes) {
     if (node.data.config.type === 'super_americana') continue
+    if (node.data.config.type === 'americana_single') continue
     const d = depths.get(node.id) ?? 0
     if (!byDepth.has(d)) byDepth.set(d, [])
     byDepth.get(d)!.push(node.id)
@@ -774,6 +779,7 @@ export function generateAllMatches(
 
   for (const node of sortedNodes) {
     if (node.data.config.type === 'super_americana') continue
+    if (node.data.config.type === 'americana_single') continue
 
     const provenances = provenanceMap.get(node.id) ?? []
     const isRoot = !graph.edges.some((e) => e.target === node.id)

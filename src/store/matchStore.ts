@@ -1,14 +1,16 @@
 import { create } from 'zustand'
-import type { Match, TournamentGraph } from '../types/tournament'
+import type { Match, TeamWithJoueurs, TournamentGraph } from '../types/tournament'
 import { supabase } from '../lib/supabase'
 import { generateAllMatches, computeInputSlotPairs } from '../lib/matchGeneration'
 import { computeAdvancements, computeAdvancementResets } from '../lib/advancement'
 import { computeNextRoundPairings } from '../lib/swissPairing'
+import { computeNextAmericanaSingleMatch } from '../lib/americanaSinglePairing'
 import { useTournamentStore } from './tournamentStore'
 
 interface MatchState {
   matches: Match[]
   isGenerating: boolean
+  isGeneratingBatch: boolean
   isLoading: boolean
   isAssigning: boolean
 
@@ -25,10 +27,66 @@ interface MatchState {
   updateMatchHoraire: (matchId: string, horaire: string | null) => Promise<void>
   configureTournament: (tournamentId: string) => Promise<void>
   activateTournament: (tournamentId: string) => Promise<void>
+  startAmericanaSinglePhase: (tournamentId: string, phaseNodeId: string, playerIds: string[], pistes: number[]) => Promise<void>
+  generateAmericanaSingleBatch: (phaseNodeId: string) => Promise<void>
+  updateAmericanaSingleRoster: (phaseNodeId: string, restingPlayerIds: string[], newPlayerName?: string) => Promise<void>
   resetScores: (tournamentId: string) => Promise<void>
   clearMatches: (tournamentId: string) => Promise<void>
   clearSlotAssignments: (tournamentId: string) => Promise<void>
   reset: () => void
+}
+
+async function resolvePlayerIds(names: string[]): Promise<string[]> {
+  const { data: existing } = await supabase.from('tt_joueurs').select('id, prenom')
+  const joueurs = (existing ?? []) as { id: string; prenom: string }[]
+  const ids: string[] = []
+  for (const name of names) {
+    const found = joueurs.find((j) => j.prenom.toLowerCase() === name.toLowerCase())
+    if (found) {
+      ids.push(found.id)
+    } else {
+      const { data: created } = await supabase
+        .from('tt_joueurs')
+        .insert({ prenom: name })
+        .select('id')
+        .single()
+      if (created) ids.push(created.id)
+    }
+  }
+  return ids
+}
+
+async function upsertTeam(player1Id: string, player2Id: string): Promise<string | null> {
+  const { data: existing } = await supabase
+    .from('tt_teams')
+    .select('id')
+    .or(`and(joueur1_id.eq.${player1Id},joueur2_id.eq.${player2Id}),and(joueur1_id.eq.${player2Id},joueur2_id.eq.${player1Id})`)
+    .limit(1)
+  if (existing && existing.length > 0) return existing[0].id
+  const { data } = await supabase
+    .from('tt_teams')
+    .insert({ joueur1_id: player1Id, joueur2_id: player2Id })
+    .select('id')
+    .single()
+  return data?.id ?? null
+}
+
+async function fetchTeamsMapForMatches(matches: Match[]): Promise<Map<string, TeamWithJoueurs>> {
+  const teamIds = new Set<string>()
+  for (const m of matches) {
+    if (m.equipe1_id) teamIds.add(m.equipe1_id)
+    if (m.equipe2_id) teamIds.add(m.equipe2_id)
+  }
+  if (teamIds.size === 0) return new Map()
+  const { data } = await supabase
+    .from('tt_teams')
+    .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
+    .in('id', [...teamIds])
+  const map = new Map<string, TeamWithJoueurs>()
+  if (data) {
+    for (const t of data as unknown as TeamWithJoueurs[]) map.set(t.id, t)
+  }
+  return map
 }
 
 function shuffle<T>(array: T[]): T[] {
@@ -43,6 +101,7 @@ function shuffle<T>(array: T[]): T[] {
 export const useMatchStore = create<MatchState>((set, get) => ({
   matches: [],
   isGenerating: false,
+  isGeneratingBatch: false,
   isLoading: false,
   isAssigning: false,
 
@@ -60,9 +119,10 @@ export const useMatchStore = create<MatchState>((set, get) => ({
             }))
           } else if (payload.eventType === 'INSERT') {
             const inserted = payload.new as Match
-            set((state) => ({
-              matches: [...state.matches, inserted],
-            }))
+            set((state) => {
+              if (state.matches.some((m) => m.id === inserted.id)) return state
+              return { matches: [...state.matches, inserted] }
+            })
           } else if (payload.eventType === 'DELETE') {
             const deleted = payload.old as { id: string }
             set((state) => ({
@@ -122,7 +182,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
     // Identifier les phases racine (pas d'arêtes entrantes)
     const rootNodes = graph.nodes.filter(
-      (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana',
+      (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
     )
 
     // Calculer le nombre total d'équipes nécessaires
@@ -237,7 +297,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     set({ isAssigning: true })
 
     const rootNodes = graph.nodes.filter(
-      (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana',
+      (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
     )
 
     // Recharger les matchs depuis DB pour avoir les équipes actuellement assignées
@@ -255,7 +315,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
     for (const node of rootNodes) {
       const { type, inputCount } = node.data.config
-      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana'>, inputCount, node.data.config.roundCount)
+      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single'>, inputCount, node.data.config.roundCount)
       const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
 
       const slotToTeam = new Map<number, string | null>()
@@ -287,7 +347,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const allUpdates: PromiseLike<unknown>[] = []
     for (const node of rootNodes) {
       const { type, inputCount } = node.data.config
-      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana'>, inputCount, node.data.config.roundCount)
+      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single'>, inputCount, node.data.config.roundCount)
       const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
 
       for (const pair of pairs) {
@@ -447,7 +507,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   assignTeamToPhaseSlot: async (tournamentId, phaseNodeId, slot, teamId) => {
     const { nodes } = useTournamentStore.getState()
     const node = nodes.find((n) => n.id === phaseNodeId)
-    if (!node || node.data.config.type === 'super_americana') return
+    if (!node || node.data.config.type === 'super_americana' || node.data.config.type === 'americana_single') return
 
     const { type, inputCount } = node.data.config
     const pairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
@@ -545,11 +605,208 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   configureTournament: async (tournamentId) => {
     await supabase.from('tt_tournaments').update({ status: 'configured' }).eq('id', tournamentId)
     useTournamentStore.getState().setTournamentStatus('configured')
+
+    // Créer les matchs initiaux des phases americana_single
+    const { nodes, tournamentConfig } = useTournamentStore.getState()
+    const pistes = tournamentConfig?.pistes ?? []
+    for (const node of nodes) {
+      if (node.data.config.type === 'americana_single') {
+        const names = (node.data.config.playerNames ?? '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        if (names.length < 4) continue
+        // Vérifier si des matchs existent déjà pour cette phase (idempotent)
+        const { data: existing } = await supabase
+          .from('tt_matches')
+          .select('id')
+          .eq('phase_node_id', node.id)
+          .limit(1)
+        if (existing && existing.length > 0) continue
+        const playerIds = await resolvePlayerIds(names)
+        if (playerIds.length >= 4) {
+          await get().startAmericanaSinglePhase(tournamentId, node.id, playerIds, pistes)
+        }
+      }
+    }
   },
 
   activateTournament: async (tournamentId) => {
     await supabase.from('tt_tournaments').update({ status: 'active' }).eq('id', tournamentId)
     useTournamentStore.getState().setTournamentStatus('active')
+  },
+
+  startAmericanaSinglePhase: async (tournamentId, phaseNodeId, playerIds, pistes) => {
+    const { nodes } = useTournamentStore.getState()
+    const node = nodes.find((n) => n.id === phaseNodeId)
+    if (!node) return
+
+    const initialCount = Math.min(3, Math.floor(playerIds.length / 4))
+
+    let currentPhaseMatches: Match[] = get().matches.filter((m) => m.phase_node_id === phaseNodeId)
+
+    for (let i = 0; i < initialCount; i++) {
+      const teamsMap = await fetchTeamsMapForMatches(currentPhaseMatches)
+      const result = computeNextAmericanaSingleMatch(playerIds, currentPhaseMatches, teamsMap)
+      if (!result) break
+
+      const teamId1 = await upsertTeam(result.pair1[0], result.pair1[1])
+      const teamId2 = await upsertTeam(result.pair2[0], result.pair2[1])
+      if (!teamId1 || !teamId2) break
+
+      const ordre = currentPhaseMatches.length + 1
+      const { data: newMatch } = await supabase
+        .from('tt_matches')
+        .insert({
+          tournament_id: tournamentId,
+          phase_node_id: phaseNodeId,
+          nom: `Match ${ordre} de ${node.data.config.name}`,
+          statut: 'a_jouer',
+          equipe1_id: teamId1,
+          equipe2_id: teamId2,
+          piste: pistes[i] ?? null,
+          ordre,
+          round: null,
+          score_equipe1: null,
+          score_equipe2: null,
+          finished_at: null,
+          horaire: null,
+          equipe1_label: null,
+          equipe2_label: null,
+        })
+        .select()
+        .single()
+
+      if (newMatch) {
+        currentPhaseMatches = [...currentPhaseMatches, newMatch as Match]
+        set((state) => ({ matches: [...state.matches, newMatch as Match] }))
+      }
+    }
+  },
+
+  generateAmericanaSingleBatch: async (phaseNodeId) => {
+    if (get().isGeneratingBatch) return
+    set({ isGeneratingBatch: true })
+
+    try {
+    const { nodes, tournamentConfig } = useTournamentStore.getState()
+    const node = nodes.find((n) => n.id === phaseNodeId)
+    if (!node || node.data.config.type !== 'americana_single') return
+
+    // Vérifier en mémoire que tous les matchs sont terminés
+    const phaseMatchesLocal = get().matches.filter((m) => m.phase_node_id === phaseNodeId)
+    if (phaseMatchesLocal.length > 0 && phaseMatchesLocal.some((m) => m.statut === 'a_jouer')) return
+
+    // Anti-conflit : vérifier en DB qu'aucun match actif n'existe déjà
+    const { data: activeCheck } = await supabase
+      .from('tt_matches')
+      .select('id')
+      .eq('phase_node_id', phaseNodeId)
+      .eq('statut', 'a_jouer')
+      .limit(1)
+    if (activeCheck && activeCheck.length > 0) return
+
+    const playerIds = await resolvePlayerIds(
+      (node.data.config.playerNames ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+    )
+    if (playerIds.length < 4) return
+
+    // Recharger les matchs depuis la DB pour avoir l'état exact
+    const { data: dbMatches } = await supabase
+      .from('tt_matches')
+      .select('*')
+      .eq('phase_node_id', phaseNodeId)
+    let currentPhaseMatches: Match[] = (dbMatches ?? []) as Match[]
+
+    const pistes = tournamentConfig?.pistes ?? []
+    const restingPlayerIds = node.data.config.restingPlayerIds ?? []
+    const activePlayers = restingPlayerIds.length
+      ? playerIds.filter((id) => !restingPlayerIds.includes(id))
+      : playerIds
+    const batchSize = Math.min(3, Math.floor(activePlayers.length / 4))
+    if (batchSize === 0) return
+
+    for (let i = 0; i < batchSize; i++) {
+      const teamsMap = await fetchTeamsMapForMatches(currentPhaseMatches)
+      const result = computeNextAmericanaSingleMatch(playerIds, currentPhaseMatches, teamsMap, restingPlayerIds)
+      if (!result) break
+
+      const teamId1 = await upsertTeam(result.pair1[0], result.pair1[1])
+      const teamId2 = await upsertTeam(result.pair2[0], result.pair2[1])
+      if (!teamId1 || !teamId2) break
+
+      const ordre = currentPhaseMatches.length + 1
+      const { data: newMatch } = await supabase
+        .from('tt_matches')
+        .insert({
+          tournament_id: currentPhaseMatches[0]?.tournament_id ?? node.id,
+          phase_node_id: phaseNodeId,
+          nom: `Match ${ordre} de ${node.data.config.name}`,
+          statut: 'a_jouer',
+          equipe1_id: teamId1,
+          equipe2_id: teamId2,
+          piste: pistes[i] ?? null,
+          ordre,
+          round: null,
+          score_equipe1: null,
+          score_equipe2: null,
+          finished_at: null,
+          horaire: null,
+          equipe1_label: null,
+          equipe2_label: null,
+        })
+        .select()
+        .single()
+
+      if (newMatch) {
+        currentPhaseMatches = [...currentPhaseMatches, newMatch as Match]
+        set((state) => {
+          if (state.matches.some((m) => m.id === (newMatch as Match).id)) return state
+          return { matches: [...state.matches, newMatch as Match] }
+        })
+      }
+    }
+    } finally {
+      set({ isGeneratingBatch: false })
+    }
+  },
+
+  updateAmericanaSingleRoster: async (phaseNodeId, restingPlayerIds, newPlayerName) => {
+    const { nodes, edges, tournamentId, updatePhaseConfig } = useTournamentStore.getState()
+    const node = nodes.find((n) => n.id === phaseNodeId)
+    if (!node || !tournamentId) return
+
+    const updates: Record<string, unknown> = { restingPlayerIds }
+
+    if (newPlayerName) {
+      const trimmed = newPlayerName.trim()
+      if (trimmed) {
+        await resolvePlayerIds([trimmed])
+        const current = (node.data.config.playerNames ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+        if (!current.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
+          current.push(trimmed)
+          updates.playerNames = current.join(', ')
+          updates.inputCount = current.length
+        }
+      }
+    }
+
+    updatePhaseConfig(phaseNodeId, updates as Parameters<typeof updatePhaseConfig>[1])
+
+    // Sauvegarder immédiatement sans passer par isDirty
+    const updatedNodes = useTournamentStore.getState().nodes
+    await supabase.from('tt_tournaments').update({
+      graph_config: {
+        nodes: updatedNodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
+        edges: edges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          sourceHandle: e.sourceHandle,
+          target: e.target,
+          targetHandle: e.targetHandle,
+        })),
+      },
+    }).eq('id', tournamentId)
   },
 
   resetScores: async (tournamentId) => {
