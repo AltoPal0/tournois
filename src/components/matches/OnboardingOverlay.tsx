@@ -105,6 +105,15 @@ function SlidePlayerSelect({ teamsMap, onSelect, onSkip }: {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
+  // Empêche le zoom iOS/Android quand le clavier sort — restaure à la sortie
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="viewport"]')
+    if (!meta) return
+    const original = meta.getAttribute('content') ?? ''
+    meta.setAttribute('content', original + ', maximum-scale=1, user-scalable=no')
+    return () => meta.setAttribute('content', original)
+  }, [])
+
   const players = useMemo(() => {
     const seen = new Set<string>()
     const list: { id: string; prenom: string }[] = []
@@ -150,7 +159,8 @@ function SlidePlayerSelect({ teamsMap, onSelect, onSkip }: {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Rechercher un joueur…"
-          className="flex-1 bg-transparent text-white placeholder-white/30 text-sm outline-none"
+          className="flex-1 bg-transparent text-white placeholder-white/30 outline-none"
+          style={{ fontSize: '16px' }}
         />
       </div>
 

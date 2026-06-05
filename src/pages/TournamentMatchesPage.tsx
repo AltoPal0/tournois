@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useState } from 'react'
+import { useEffect, useMemo, useCallback, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router'
 import { useMatchStore } from '../store/matchStore'
 import { useTournamentStore } from '../store/tournamentStore'
@@ -44,6 +44,8 @@ export default function TournamentMatchesPage() {
   const [showOnboarding, setShowOnboarding] = useState(() =>
     id ? !localStorage.getItem(`padel_onboarded_${id}`) : false
   )
+  const [teamsLoaded, setTeamsLoaded] = useState(false)
+  const onboardingCheckDone = useRef(false)
 
   const { identity, setIdentity, clearIdentity, findMyTeam } = usePlayerIdentity(id ?? '')
 
@@ -71,7 +73,10 @@ export default function TournamentMatchesPage() {
       if (m.equipe1_id) teamIds.add(m.equipe1_id)
       if (m.equipe2_id) teamIds.add(m.equipe2_id)
     }
-    if (teamIds.size === 0) return
+    if (teamIds.size === 0) {
+      setTeamsLoaded(true)
+      return
+    }
     const { data } = await supabase
       .from('tt_teams')
       .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
@@ -83,11 +88,23 @@ export default function TournamentMatchesPage() {
       }
       setTeamsMap(map)
     }
+    setTeamsLoaded(true)
   }, [id])
 
   useEffect(() => {
     fetchTeams()
   }, [fetchTeams])
+
+  // Si les matchs existent mais aucune équipe n'est assignée → tournoi redémarré → réafficher l'onboarding
+  useEffect(() => {
+    if (onboardingCheckDone.current) return
+    if (isLoading || !teamsLoaded || !id) return
+    onboardingCheckDone.current = true
+    if (matches.length > 0 && teamsMap.size === 0) {
+      localStorage.removeItem(`padel_onboarded_${id}`)
+      setShowOnboarding(true)
+    }
+  }, [isLoading, teamsLoaded, matches.length, teamsMap.size, id])
 
   const handleAssignmentChanged = useCallback(async () => {
     if (id) await loadMatches(id)

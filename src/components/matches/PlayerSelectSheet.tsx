@@ -44,6 +44,16 @@ export default function PlayerSelectSheet({
     }
   }, [isOpen])
 
+  // Empêche le zoom iOS quand le clavier sort sur cette feuille
+  useEffect(() => {
+    if (!isOpen) return
+    const meta = document.querySelector('meta[name="viewport"]')
+    if (!meta) return
+    const original = meta.getAttribute('content') ?? ''
+    meta.setAttribute('content', original + ', maximum-scale=1, user-scalable=no')
+    return () => meta.setAttribute('content', original)
+  }, [isOpen])
+
   const players = useMemo(() => {
     const seen = new Set<string>()
     const list: { id: string; prenom: string }[] = []
@@ -142,8 +152,9 @@ export default function PlayerSelectSheet({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-200
-              text-navy-900 placeholder-gray-400 text-sm
+              text-navy-900 placeholder-gray-400
               focus:outline-none focus:border-padel-blue focus:bg-white transition-colors"
+            style={{ fontSize: '16px' }}
           />
         </div>
 
