@@ -81,7 +81,7 @@ function buildProvenanceMap(
   return map
 }
 
-function parseHandleIndex(handle: string): number {
+export function parseHandleIndex(handle: string): number {
   // "in-3" → 3, "out-1" → 1
   const parts = handle.split('-')
   return parseInt(parts[parts.length - 1], 10)
@@ -625,6 +625,7 @@ function assignScheduleToMatches(
   for (const node of graph.nodes) {
     if (node.data.config.type === 'super_americana') continue
     if (node.data.config.type === 'americana_single') continue
+    if (node.data.config.type === 'best_of') continue
     const d = depths.get(node.id) ?? 0
     if (!byDepth.has(d)) byDepth.set(d, [])
     byDepth.get(d)!.push(node.id)
@@ -780,6 +781,7 @@ export function generateAllMatches(
   for (const node of sortedNodes) {
     if (node.data.config.type === 'super_americana') continue
     if (node.data.config.type === 'americana_single') continue
+    if (node.data.config.type === 'best_of') continue
 
     const provenances = provenanceMap.get(node.id) ?? []
     const isRoot = !graph.edges.some((e) => e.target === node.id)

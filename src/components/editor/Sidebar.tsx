@@ -44,6 +44,12 @@ const phaseTypes: { type: PhaseType; label: string; description: string; color: 
     description: 'Joueurs individuels, matchs à la volée',
     color: 'border-teal-200 bg-teal-50 text-teal-700',
   },
+  {
+    type: 'best_of',
+    label: 'Meilleurs N',
+    description: 'Compare et route les meilleures équipes',
+    color: 'border-purple-200 bg-purple-50 text-purple-700',
+  },
 ]
 
 export default function Sidebar({ onOpenConfig }: { onOpenConfig?: () => void }) {

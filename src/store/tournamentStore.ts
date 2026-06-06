@@ -26,6 +26,7 @@ function createDefaultOutputs(type: PhaseType): PhaseOutput[] {
     match_simple: { count: 2, labels: ['Vainqueur', 'Perdant'] },
     americano: { count: 2, labels: ['1er', '2ème'] },
     americana_single: { count: 3, labels: ['1er', '2ème', '3ème'] },
+    best_of: { count: 3, labels: ['1er meilleur', '2ème meilleur', '3ème meilleur'] },
   }
   const { count, labels } = configs[type]
   return Array.from({ length: count }, (_, i) => ({
@@ -44,6 +45,7 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     match_simple: 'Match',
     americano: 'Américano',
     americana_single: 'Americana Single',
+    best_of: 'Meilleurs N',
   }
   const inputCounts: Record<PhaseType, number> = {
     round_robin: 4,
@@ -53,6 +55,7 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     match_simple: 2,
     americano: 6,
     americana_single: 8,
+    best_of: 3,
   }
   return {
     name: names[type],

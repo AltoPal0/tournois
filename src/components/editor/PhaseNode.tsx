@@ -45,6 +45,12 @@ const typeStyles = {
     selectedRing: 'ring-amber-500',
     label: 'Américano',
   },
+  best_of: {
+    badge: 'bg-purple-100 text-purple-700',
+    border: 'border-purple-200',
+    selectedRing: 'ring-purple-500',
+    label: 'Meilleurs N',
+  },
 }
 
 function PhaseNode({ id, data, selected }: NodeProps<Node<PhaseNodeData>>) {

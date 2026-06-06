@@ -1,5 +1,6 @@
 import type { Match, TournamentGraph } from '../types/tournament'
 import { computeStandings } from './standings'
+import { parseHandleIndex } from './matchGeneration'
 
 export interface AdvancementUpdate {
   matchId: string
@@ -33,6 +34,14 @@ export function computeAdvancements(
 
   if (config.type === 'round_robin' || config.type === 'tournante_libre' || config.type === 'americano' || config.type === 'americana_single') {
     advanceFromRoundRobin(phaseMatches, node, allMatches, updates)
+    // Si la poule alimente un nœud best_of, déclencher son évaluation
+    for (const edge of graph.edges) {
+      if (edge.source !== phaseNodeId) continue
+      const targetNode = graph.nodes.find((n) => n.id === edge.target)
+      if (targetNode?.data.config.type === 'best_of') {
+        advanceFromBestOf(targetNode, allMatches, graph, updates)
+      }
+    }
   } else if (config.type === 'elimination') {
     advanceFromElimination(completedMatch, phaseMatches, node, allMatches, updates)
   } else if (config.type === 'match_simple') {
@@ -71,6 +80,63 @@ function advanceFromRoundRobin(
     const targets = findMatchesByLabel(label, allMatches)
     for (const target of targets) {
       updates.push({ matchId: target.matchId, field: target.field, teamId })
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Best Of : compare N équipes de poules différentes, route les meilleures
+// ---------------------------------------------------------------------------
+
+function advanceFromBestOf(
+  bestOfNode: TournamentGraph['nodes'][number],
+  allMatches: Match[],
+  graph: TournamentGraph,
+  updates: AdvancementUpdate[],
+) {
+  const config = bestOfNode.data.config
+  const incomingEdges = graph.edges.filter((e) => e.target === bestOfNode.id)
+  if (incomingEdges.length === 0) return
+
+  const candidates: { teamId: string; points: number; diff: number; gamesWon: number }[] = []
+
+  for (const edge of incomingEdges) {
+    const sourceNode = graph.nodes.find((n) => n.id === edge.source)
+    if (!sourceNode) return
+
+    const outputRank = parseHandleIndex(edge.sourceHandle)
+    const poolMatches = allMatches.filter((m) => m.phase_node_id === sourceNode.id)
+    if (poolMatches.length === 0) return
+    if (!poolMatches.every((m) => m.statut === 'termine')) return
+
+    const standings = computeStandings(poolMatches)
+    const team = standings[outputRank - 1]
+    if (!team) return
+
+    candidates.push({
+      teamId: team.teamId,
+      points: team.points,
+      diff: team.gamesWon - team.gamesLost,
+      gamesWon: team.gamesWon,
+    })
+  }
+
+  if (candidates.length !== incomingEdges.length) return
+
+  candidates.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points
+    if (b.diff !== a.diff) return b.diff - a.diff
+    return b.gamesWon - a.gamesWon
+  })
+
+  const sortedOutputs = [...config.outputs].sort((a, b) => a.rank - b.rank)
+  for (let i = 0; i < candidates.length; i++) {
+    const output = sortedOutputs[i]
+    if (!output) continue
+    const label = `${output.label} de ${config.name}`
+    const targets = findMatchesByLabel(label, allMatches)
+    for (const target of targets) {
+      updates.push({ matchId: target.matchId, field: target.field, teamId: candidates[i].teamId })
     }
   }
 }
@@ -201,8 +267,30 @@ export function computeAdvancementResets(
     config.type === 'match_simple' ||
     config.type === 'americana_single'
   ) {
-    // Cherche les slots cross-phase remplis via les output labels de cette phase
     for (const output of config.outputs) {
+      // Si cet output alimente un nœud best_of, vider les slots downstream du best_of
+      const outEdge = graph.edges.find(
+        (e) => e.source === node.id && parseHandleIndex(e.sourceHandle) === output.rank,
+      )
+      if (outEdge) {
+        const targetNode = graph.nodes.find((n) => n.id === outEdge.target)
+        if (targetNode?.data.config.type === 'best_of') {
+          for (const bestOfOutput of targetNode.data.config.outputs) {
+            const bestOfLabel = `${bestOfOutput.label} de ${targetNode.data.config.name}`
+            for (const m of allMatches) {
+              if (m.equipe1_label === bestOfLabel && m.equipe1_id) {
+                results.push({ matchId: m.id, field: 'equipe1_id' })
+              }
+              if (m.equipe2_label === bestOfLabel && m.equipe2_id) {
+                results.push({ matchId: m.id, field: 'equipe2_id' })
+              }
+            }
+          }
+          continue
+        }
+      }
+
+      // Cas normal : slots cross-phase remplis directement via les output labels
       const label = `${output.label} de ${config.name}`
       for (const m of allMatches) {
         if (m.equipe1_label === label && m.equipe1_id) {
