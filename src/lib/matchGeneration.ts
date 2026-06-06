@@ -489,11 +489,13 @@ function generateTournantreLibreMatches(
  * sont retournés (round robin: tous, élimination: round 1 uniquement).
  */
 export function computeInputSlotPairs(
-  phaseType: 'round_robin' | 'elimination' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single',
+  phaseType: 'round_robin' | 'elimination' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single' | 'best_of',
   inputCount: number,
   roundCount?: number,
 ): { ordre: number; slot1: number; slot2: number }[] {
   const pairs: { ordre: number; slot1: number; slot2: number }[] = []
+
+  if (phaseType === 'best_of') return pairs
 
   if (phaseType === 'match_simple') {
     return [{ ordre: 1, slot1: 1, slot2: 2 }]
