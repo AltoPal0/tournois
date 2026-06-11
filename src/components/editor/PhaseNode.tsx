@@ -28,6 +28,12 @@ const typeStyles = {
     selectedRing: 'ring-teal-500',
     label: 'Americana Single',
   },
+  americana_weighted: {
+    badge: 'bg-sky-100 text-sky-700',
+    border: 'border-sky-200',
+    selectedRing: 'ring-sky-500',
+    label: 'Americana Pondérée',
+  },
   tournante_libre: {
     badge: 'bg-violet-100 text-violet-700',
     border: 'border-violet-200',
@@ -220,7 +226,7 @@ function PhaseNode({ id, data, selected }: NodeProps<Node<PhaseNodeData>>) {
           <SlotDiagram nodeId={id} config={config} />
         ) : (
           <span className="text-xs text-gray-400">
-            {config.inputCount} équipe{config.inputCount > 1 ? 's' : ''}
+            {config.inputCount} {config.type === 'americana_weighted' ? 'joueur' : 'équipe'}{config.inputCount > 1 ? 's' : ''}
           </span>
         )}
       </div>

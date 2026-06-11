@@ -53,12 +53,12 @@ const isDirty = useTournamentStore((s) => s.isDirty)
 
   const allPlayersAssigned = useMemo(() => {
     const regularRootNodes = nodes.filter(
-      (n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
+      (n) => rootNodeIds.has(n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single' && n.data.config.type !== 'americana_weighted',
     )
-    const americanaSingleNodes = nodes.filter(
-      (n) => rootNodeIds.has(n.id) && n.data.config.type === 'americana_single',
+    const americanaLikeNodes = nodes.filter(
+      (n) => rootNodeIds.has(n.id) && (n.data.config.type === 'americana_single' || n.data.config.type === 'americana_weighted'),
     )
-    if (regularRootNodes.length === 0 && americanaSingleNodes.length === 0) return false
+    if (regularRootNodes.length === 0 && americanaLikeNodes.length === 0) return false
 
     const regularOk = regularRootNodes.length === 0 || regularRootNodes.every((node) => {
       const phaseMatches = matches.filter((m) => m.phase_node_id === node.id)
@@ -67,7 +67,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
         : phaseMatches.filter((m) => m.round === 1)
       return required.length > 0 && required.every((m) => m.equipe1_id && m.equipe2_id)
     })
-    const americanaOk = americanaSingleNodes.every((n) => {
+    const americanaOk = americanaLikeNodes.every((n) => {
       const count = (n.data.config.playerNames ?? '').split(',').map((s) => s.trim()).filter(Boolean).length
       return count >= 4
     })
@@ -275,7 +275,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
             </button>
           )}
 
-          {tournamentStatus === 'draft' && (matches.length > 0 || nodes.some((n) => n.data.config.type === 'americana_single')) && allPlayersAssigned && (
+          {tournamentStatus === 'draft' && (matches.length > 0 || nodes.some((n) => n.data.config.type === 'americana_single' || n.data.config.type === 'americana_weighted')) && allPlayersAssigned && (
             <button
               onClick={handleConfigure}
               disabled={isConfiguring}

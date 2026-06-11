@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Match, PhaseType, TeamWithJoueurs, PlayerTemplate, FontScale } from '../../types/tournament'
 import { computeStandings } from '../../lib/standings'
-import { computeAmericanaSingleStandings } from '../../lib/americanaSingleStandings'
+import { computeAmericanaSingleStandings, computeWeightedAmericanoStandings } from '../../lib/americanaSingleStandings'
 import StandingsTable from './StandingsTable'
 import ScoreInput from './ScoreInput'
 
@@ -28,6 +28,7 @@ function getRoundLabel(type: PhaseType, round: number | null, matches: Match[]):
   if (type === 'round_robin') return `Tour ${round ?? '?'}`
   if (type === 'tournante_libre') return `Round ${round ?? '?'}`
   if (type === 'americana_single') return `Match ${matches[0]?.ordre ?? round ?? '?'}`
+  if (type === 'americana_weighted') return `Round ${round ?? '?'}`
   const first = matches[0]
   if (first) {
     const nom = first.nom
@@ -79,7 +80,7 @@ interface CardProps {
 function MatchCardDefault({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
-  const canScore = isActive && !!(match.equipe1_id && match.equipe2_id)
+  const canScore = isActive && !!((match.equipe1_id && match.equipe2_id) || (match.equipe1_label && match.equipe2_label))
   const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
@@ -143,7 +144,7 @@ const SLICK_CLIP_INNER = 'polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(1
 function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
-  const canScore = isActive && !!(match.equipe1_id && match.equipe2_id)
+  const canScore = isActive && !!((match.equipe1_id && match.equipe2_id) || (match.equipe1_label && match.equipe2_label))
   const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
@@ -241,7 +242,7 @@ function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myT
 function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
-  const canScore = isActive && !!(match.equipe1_id && match.equipe2_id)
+  const canScore = isActive && !!((match.equipe1_id && match.equipe2_id) || (match.equipe1_label && match.equipe2_label))
   const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
@@ -316,7 +317,7 @@ function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, m
 function MatchCardGreenTurf({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
-  const canScore = isActive && !!(match.equipe1_id && match.equipe2_id)
+  const canScore = isActive && !!((match.equipe1_id && match.equipe2_id) || (match.equipe1_label && match.equipe2_label))
   const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
@@ -407,6 +408,10 @@ interface PhaseSectionProps {
   onTerminate?: () => void
   isTerminating?: boolean
   playerNames?: string
+  liveGeneration?: boolean
+  roundCount?: number
+  onGenerateNextRound?: () => void
+  isGeneratingNextRound?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -433,6 +438,10 @@ export default function PhaseSection({
   onTerminate,
   isTerminating = false,
   playerNames = '',
+  liveGeneration = false,
+  roundCount = 3,
+  onGenerateNextRound,
+  isGeneratingNextRound = false,
 }: PhaseSectionProps) {
   const [confirmTerminate, setConfirmTerminate] = useState(false)
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
@@ -445,6 +454,11 @@ export default function PhaseSection({
   const individualStandings = useMemo(
     () => (type === 'americana_single' ? computeAmericanaSingleStandings(matches, teamsMap) : []),
     [type, matches, teamsMap],
+  )
+
+  const weightedStandings = useMemo(
+    () => (type === 'americana_weighted' ? computeWeightedAmericanoStandings(matches) : []),
+    [type, matches],
   )
 
   const matchesToShow = displayMatches ?? matches
@@ -465,8 +479,8 @@ export default function PhaseSection({
       }))
   }, [matchesToShow, type])
 
-  const scoringTeam1Name = scoringMatch ? getTeamName(scoringMatch.equipe1_id, teamsMap) : null
-  const scoringTeam2Name = scoringMatch ? getTeamName(scoringMatch.equipe2_id, teamsMap) : null
+  const scoringTeam1Name = scoringMatch ? (getTeamName(scoringMatch.equipe1_id, teamsMap) ?? scoringMatch.equipe1_label) : null
+  const scoringTeam2Name = scoringMatch ? (getTeamName(scoringMatch.equipe2_id, teamsMap) ?? scoringMatch.equipe2_label) : null
 
   const cardProps = { teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick: setScoringMatch }
 
@@ -573,40 +587,47 @@ export default function PhaseSection({
         </div>
       )}
 
-      {type === 'americana_single' && individualStandings.length > 0 && (
-        <div className="mb-4">
-          <div className="overflow-x-auto rounded-xl border border-gray-100">
-            <table className={`w-full ${fscale(fontScale, 'text-xs', 'text-sm', 'text-base')}`}>
-              <thead>
-                <tr className="bg-gray-50 text-gray-400 uppercase tracking-wider">
-                  <th className="px-3 py-2 text-left">#</th>
-                  <th className="px-3 py-2 text-left">Joueur</th>
-                  <th className="px-3 py-2 text-center">J</th>
-                  <th className="px-3 py-2 text-center">V</th>
-                  <th className="px-3 py-2 text-center">Pts</th>
-                  <th className="px-3 py-2 text-center">+/-</th>
-                </tr>
-              </thead>
-              <tbody>
-                {individualStandings.map((row, idx) => (
-                  <tr key={row.playerId} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                    <td className="px-3 py-2 text-gray-400 font-medium">{idx + 1}</td>
-                    <td className="px-3 py-2 font-semibold text-gray-800">
-                      {playersMap?.get(row.playerId) ?? row.playerId.slice(0, 8)}
-                    </td>
-                    <td className="px-3 py-2 text-center text-gray-500">{row.played}</td>
-                    <td className="px-3 py-2 text-center text-gray-500">{row.wins}</td>
-                    <td className="px-3 py-2 text-center font-bold text-teal-700">{row.points}</td>
-                    <td className="px-3 py-2 text-center text-gray-500">
-                      {row.gamesWon - row.gamesLost > 0 ? '+' : ''}{row.gamesWon - row.gamesLost}
-                    </td>
+      {(type === 'americana_single' || type === 'americana_weighted') && (() => {
+        const rows = type === 'americana_single' ? individualStandings : weightedStandings
+        if (rows.length === 0) return null
+        const accentColor = type === 'americana_weighted' ? 'text-sky-700' : 'text-teal-700'
+        return (
+          <div className="mb-4">
+            <div className="overflow-x-auto rounded-xl border border-gray-100">
+              <table className={`w-full ${fscale(fontScale, 'text-xs', 'text-sm', 'text-base')}`}>
+                <thead>
+                  <tr className="bg-gray-50 text-gray-400 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left">#</th>
+                    <th className="px-3 py-2 text-left">Joueur</th>
+                    <th className="px-3 py-2 text-center">J</th>
+                    <th className="px-3 py-2 text-center">V</th>
+                    <th className="px-3 py-2 text-center">Pts</th>
+                    <th className="px-3 py-2 text-center">+/-</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((row, idx) => (
+                    <tr key={row.playerId} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                      <td className="px-3 py-2 text-gray-400 font-medium">{idx + 1}</td>
+                      <td className="px-3 py-2 font-semibold text-gray-800">
+                        {type === 'americana_single'
+                          ? (playersMap?.get(row.playerId) ?? row.playerId.slice(0, 8))
+                          : row.playerId}
+                      </td>
+                      <td className="px-3 py-2 text-center text-gray-500">{row.played}</td>
+                      <td className="px-3 py-2 text-center text-gray-500">{row.wins}</td>
+                      <td className={`px-3 py-2 text-center font-bold ${accentColor}`}>{row.points}</td>
+                      <td className="px-3 py-2 text-center text-gray-500">
+                        {row.gamesWon - row.gamesLost > 0 ? '+' : ''}{row.gamesWon - row.gamesLost}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       <FilterToggle />
 
@@ -621,8 +642,9 @@ export default function PhaseSection({
         </div>
       ))}
 
-      {type === 'americana_single' && matches.length === 0 && (() => {
+      {(type === 'americana_single' || type === 'americana_weighted') && matches.length === 0 && (() => {
         const players = playerNames.split(',').map((s) => s.trim()).filter(Boolean)
+        const isWeighted = type === 'americana_weighted'
         if (players.length === 0) return (
           <div className="py-10 text-center text-gray-400 text-sm">
             Aucun joueur configuré pour cette phase.
@@ -632,10 +654,12 @@ export default function PhaseSection({
           <div className="mb-4">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
               {players.length} joueur{players.length > 1 ? 's' : ''} inscrits
+              {isWeighted && <span className="ml-2 text-sky-500 normal-case font-normal">↑ du plus fort au plus faible</span>}
             </p>
             <div className="flex flex-wrap gap-2">
-              {players.map((name) => (
-                <span key={name} className="px-3 py-1 bg-teal-50 border border-teal-200 rounded-full text-sm font-medium text-teal-800">
+              {players.map((name, i) => (
+                <span key={name} className={`px-3 py-1 rounded-full text-sm font-medium ${isWeighted ? 'bg-sky-50 border border-sky-200 text-sky-800' : 'bg-teal-50 border border-teal-200 text-teal-800'}`}>
+                  {isWeighted && <span className="text-xs opacity-50 mr-1">#{i + 1}</span>}
                   {name}
                 </span>
               ))}
@@ -704,6 +728,35 @@ export default function PhaseSection({
           </span>
         </div>
       )}
+
+      {/* Americana Weighted — bouton "Générer le round suivant" (mode live uniquement) */}
+      {type === 'americana_weighted' && liveGeneration && (() => {
+        const currentRound = matches.reduce((max, m) => Math.max(max, m.round ?? 0), 0)
+        const currentRoundMatches = matches.filter((m) => m.round === currentRound)
+        const allDone = currentRoundMatches.length > 0 && currentRoundMatches.every((m) => m.statut === 'termine')
+        const hasMore = currentRound < roundCount
+        if (!allDone || !hasMore || !onGenerateNextRound) return null
+        return (
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={onGenerateNextRound}
+              disabled={isGeneratingNextRound}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold
+                bg-sky-600 text-white hover:bg-sky-500 transition-all duration-200
+                active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-sky-600/25"
+            >
+              {isGeneratingNextRound ? (
+                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                </svg>
+              )}
+              {isGeneratingNextRound ? 'Génération…' : `Générer le round ${currentRound + 1}`}
+            </button>
+          </div>
+        )
+      })()}
 
       {scoringMatch && (
         <ScoreInput

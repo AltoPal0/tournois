@@ -23,6 +23,7 @@ export default function TournamentMatchesPage() {
   const generateMatches = useMatchStore((s) => s.generateMatches)
   const generateAmericanaSingleBatch = useMatchStore((s) => s.generateAmericanaSingleBatch)
   const terminateAmericanaSinglePhase = useMatchStore((s) => s.terminateAmericanaSinglePhase)
+  const generateWeightedAmericanoNextRound = useMatchStore((s) => s.generateWeightedAmericanoNextRound)
   const isGeneratingBatch = useMatchStore((s) => s.isGeneratingBatch)
   const updateAmericanaSingleRoster = useMatchStore((s) => s.updateAmericanaSingleRoster)
   const resetMatches = useMatchStore((s) => s.reset)
@@ -115,7 +116,7 @@ export default function TournamentMatchesPage() {
   useEffect(() => {
     if (nodes.length === 0) return
     const names = nodes
-      .filter((n) => n.data.config.type === 'americana_single' && n.data.config.playerNames)
+      .filter((n) => (n.data.config.type === 'americana_single' || n.data.config.type === 'americana_weighted') && n.data.config.playerNames)
       .flatMap((n) =>
         (n.data.config.playerNames ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
       )
@@ -553,9 +554,27 @@ export default function TournamentMatchesPage() {
                   : undefined
               }
               playerNames={
-                activePhase.type === 'americana_single'
+                (activePhase.type === 'americana_single' || activePhase.type === 'americana_weighted')
                   ? (nodes.find((n) => n.id === activePhase.id)?.data.config.playerNames ?? '')
                   : undefined
+              }
+              liveGeneration={
+                activePhase.type === 'americana_weighted'
+                  ? (nodes.find((n) => n.id === activePhase.id)?.data.config.liveGeneration ?? false)
+                  : undefined
+              }
+              roundCount={
+                activePhase.type === 'americana_weighted'
+                  ? (nodes.find((n) => n.id === activePhase.id)?.data.config.roundCount ?? 3)
+                  : undefined
+              }
+              onGenerateNextRound={
+                activePhase.type === 'americana_weighted'
+                  ? () => generateWeightedAmericanoNextRound(activePhase.id)
+                  : undefined
+              }
+              isGeneratingNextRound={
+                activePhase.type === 'americana_weighted' ? isGeneratingBatch : undefined
               }
               onTerminate={
                 activePhase.type === 'americana_single'

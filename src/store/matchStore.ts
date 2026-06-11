@@ -5,7 +5,8 @@ import { generateAllMatches, computeInputSlotPairs } from '../lib/matchGeneratio
 import { computeAdvancements, computeAdvancementResets } from '../lib/advancement'
 import { computeNextRoundPairings } from '../lib/swissPairing'
 import { computeNextAmericanaSingleMatch } from '../lib/americanaSinglePairing'
-import { computeAmericanaSingleStandings } from '../lib/americanaSingleStandings'
+import { computeAmericanaSingleStandings, computeWeightedAmericanoStandings } from '../lib/americanaSingleStandings'
+import { snakeWeightedRound } from '../lib/matchGeneration'
 import { useTournamentStore } from './tournamentStore'
 
 interface MatchState {
@@ -32,6 +33,7 @@ interface MatchState {
   generateAmericanaSingleBatch: (phaseNodeId: string) => Promise<void>
   terminateAmericanaSinglePhase: (phaseNodeId: string) => Promise<void>
   updateAmericanaSingleRoster: (phaseNodeId: string, restingPlayerIds: string[], newPlayerName?: string) => Promise<void>
+  generateWeightedAmericanoNextRound: (phaseNodeId: string) => Promise<void>
   resetScores: (tournamentId: string) => Promise<void>
   clearMatches: (tournamentId: string) => Promise<void>
   clearSlotAssignments: (tournamentId: string) => Promise<void>
@@ -276,7 +278,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
     // Identifier les phases racine (pas d'arêtes entrantes)
     const rootNodes = graph.nodes.filter(
-      (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
+      (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single' && n.data.config.type !== 'americana_weighted',
     )
 
     // Calculer le nombre total d'équipes nécessaires
@@ -391,7 +393,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     set({ isAssigning: true })
 
     const rootNodes = graph.nodes.filter(
-      (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
+      (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single' && n.data.config.type !== 'americana_weighted',
     )
 
     // Recharger les matchs depuis DB pour avoir les équipes actuellement assignées
@@ -409,7 +411,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
     for (const node of rootNodes) {
       const { type, inputCount } = node.data.config
-      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single' | 'best_of' | 'team_builder' | 'team_splitter'>, inputCount, node.data.config.roundCount)
+      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single' | 'americana_weighted' | 'best_of' | 'team_builder' | 'team_splitter'>, inputCount, node.data.config.roundCount)
       const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
 
       const slotToTeam = new Map<number, string | null>()
@@ -441,7 +443,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const allUpdates: PromiseLike<unknown>[] = []
     for (const node of rootNodes) {
       const { type, inputCount } = node.data.config
-      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single' | 'best_of' | 'team_builder' | 'team_splitter'>, inputCount, node.data.config.roundCount)
+      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single' | 'americana_weighted' | 'best_of' | 'team_builder' | 'team_splitter'>, inputCount, node.data.config.roundCount)
       const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
 
       for (const pair of pairs) {
@@ -600,7 +602,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   assignTeamToPhaseSlot: async (tournamentId, phaseNodeId, slot, teamId) => {
     const { nodes } = useTournamentStore.getState()
     const node = nodes.find((n) => n.id === phaseNodeId)
-    if (!node || node.data.config.type === 'super_americana' || node.data.config.type === 'americana_single' || node.data.config.type === 'best_of' || node.data.config.type === 'team_builder' || node.data.config.type === 'team_splitter') return
+    if (!node || node.data.config.type === 'super_americana' || node.data.config.type === 'americana_single' || node.data.config.type === 'americana_weighted' || node.data.config.type === 'best_of' || node.data.config.type === 'team_builder' || node.data.config.type === 'team_splitter') return
 
     const { type, inputCount } = node.data.config
     const pairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
@@ -991,6 +993,65 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   clearMatches: async (tournamentId) => {
     await supabase.from('tt_matches').delete().eq('tournament_id', tournamentId)
     set({ matches: [] })
+  },
+
+  generateWeightedAmericanoNextRound: async (phaseNodeId) => {
+    const { nodes, tournamentId } = useTournamentStore.getState()
+    const node = nodes.find((n) => n.id === phaseNodeId)
+    if (!node || !tournamentId) return
+
+    const config = node.data.config
+    const allPlayers = (config.playerNames ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
+    if (allPlayers.length < 4) return
+
+    const phaseMatches = get().matches.filter((m) => m.phase_node_id === phaseNodeId)
+    const currentRound = phaseMatches.reduce((max, m) => Math.max(max, m.round ?? 0), 0)
+    const nextRound = currentRound + 1
+
+    // Trier les joueurs par standings actuels (mode live = appariement par forme)
+    const standings = computeWeightedAmericanoStandings(phaseMatches)
+    const rankedNames = standings.map((s) => s.playerId)
+    // Ajouter les joueurs n'ayant pas encore joué (pas dans standings)
+    for (const p of allPlayers) {
+      if (!rankedNames.includes(p)) rankedNames.push(p)
+    }
+
+    const topPlayerSet = new Set(
+      (config.topPlayers ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
+    )
+
+    // roundIndex = 0 car les joueurs sont déjà triés par forme — la diversité
+    // de partenaires est assurée par la variation des standings entre rounds
+    const roundMatches = snakeWeightedRound(rankedNames, 0, topPlayerSet.size > 0 ? topPlayerSet : undefined)
+    if (roundMatches.length === 0) return
+
+    const toInsert = roundMatches.map((rm, i) => ({
+      tournament_id: tournamentId,
+      phase_node_id: phaseNodeId,
+      nom: `Round ${nextRound} Match ${i + 1} de ${config.name}`,
+      statut: 'a_jouer',
+      equipe1_id: null,
+      equipe2_id: null,
+      equipe1_label: `${rm.team1[0]} / ${rm.team1[1]}`,
+      equipe2_label: `${rm.team2[0]} / ${rm.team2[1]}`,
+      horaire: null,
+      piste: null,
+      ordre: (phaseMatches.length + 1) + i,
+      round: nextRound,
+      score_equipe1: null,
+      score_equipe2: null,
+      finished_at: null,
+    }))
+
+    set({ isGeneratingBatch: true })
+    try {
+      const { data } = await supabase.from('tt_matches').insert(toInsert).select()
+      if (data) {
+        set((state) => ({ matches: [...state.matches, ...(data as Match[])] }))
+      }
+    } finally {
+      set({ isGeneratingBatch: false })
+    }
   },
 
   clearSlotAssignments: async (tournamentId) => {

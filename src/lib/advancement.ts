@@ -304,7 +304,8 @@ export function computeAdvancementResets(
     config.type === 'americano' ||
     config.type === 'tournante_libre' ||
     config.type === 'match_simple' ||
-    config.type === 'americana_single'
+    config.type === 'americana_single' ||
+    config.type === 'americana_weighted'
   ) {
     for (const output of config.outputs) {
       // Si cet output alimente un nœud best_of, vider les slots downstream du best_of

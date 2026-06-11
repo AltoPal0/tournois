@@ -194,7 +194,7 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
     }
 
     const rootNodes = nodes.filter(
-      (n) => !edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
+      (n) => !edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single' && n.data.config.type !== 'americana_weighted',
     )
 
     const slotList: { phaseNodeId: string; slot: number }[] = []

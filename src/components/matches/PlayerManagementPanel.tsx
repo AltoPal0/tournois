@@ -23,7 +23,7 @@ function buildSlotMap(
   matches: Match[],
   roundCount?: number,
 ): Map<number, string | null> {
-  if (type === 'super_americana' || type === 'americana_single' || type === 'best_of' || type === 'team_builder' || type === 'team_splitter') return new Map()
+  if (type === 'super_americana' || type === 'americana_single' || type === 'americana_weighted' || type === 'best_of' || type === 'team_builder' || type === 'team_splitter') return new Map()
   const pairs = computeInputSlotPairs(type, inputCount, roundCount)
   const phaseMatches = matches.filter((m) => m.phase_node_id === phaseNodeId)
   const slotMap = new Map<number, string | null>()
@@ -56,7 +56,7 @@ export default function PlayerManagementPanel({
 
   // Phases racines (sans arête entrante)
   const rootNodes = useMemo(
-    () => graph.nodes.filter((n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single'),
+    () => graph.nodes.filter((n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single' && n.data.config.type !== 'americana_weighted'),
     [graph],
   )
 

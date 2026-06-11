@@ -10,6 +10,7 @@ const phaseTypeOptions: { value: PhaseType; label: string }[] = [
   { value: 'match_simple', label: 'Match simple' },
   { value: 'americano', label: 'Américano' },
   { value: 'americana_single', label: 'Americana Single (individuel)' },
+  { value: 'americana_weighted', label: 'Americana Pondérée (Mexicano)' },
   { value: 'team_builder', label: 'Formation d\'équipes' },
   { value: 'team_splitter', label: 'Dissolution d\'équipes' },
 ]
@@ -114,8 +115,8 @@ function PanelContent({
         </select>
       </div>
 
-      {/* Nombre de rounds (tournante_libre et americano uniquement) */}
-      {(config.type === 'tournante_libre' || config.type === 'americano') && (
+      {/* Nombre de rounds (tournante_libre, americano et americana_weighted) */}
+      {(config.type === 'tournante_libre' || config.type === 'americano' || config.type === 'americana_weighted') && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Nombre de rounds</label>
           <input
@@ -133,6 +134,66 @@ function PanelContent({
               transition-shadow duration-150"
           />
         </div>
+      )}
+
+      {/* Joueurs CSV + options (americana_weighted) */}
+      {config.type === 'americana_weighted' && (
+        <>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Joueurs dans l'ordre de force (du plus fort au plus faible)
+            </label>
+            <textarea
+              rows={3}
+              value={config.playerNames ?? ''}
+              placeholder="Alice, Bob, Carlos, Diana, Emma, Félix, Gabi, Hugo"
+              onChange={(e) => {
+                const names = e.target.value
+                const count = names.split(',').map((s) => s.trim()).filter(Boolean).length
+                updatePhaseConfig(nodeId, { playerNames: names, inputCount: count })
+              }}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none
+                focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent
+                transition-shadow duration-150 font-mono"
+            />
+            {(() => {
+              const count = (config.playerNames ?? '').split(',').map((s) => s.trim()).filter(Boolean).length
+              const ok = count >= 4 && count % 4 === 0
+              if (count === 0) return null
+              return (
+                <p className={`text-[11px] mt-1 ${ok ? 'text-gray-400' : 'text-amber-600'}`}>
+                  {count} joueur{count > 1 ? 's' : ''}
+                  {!ok && ' — le nombre doit être un multiple de 4'}
+                </p>
+              )
+            })()}
+          </div>
+
+          <div className="flex items-start justify-between gap-3 py-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-medium text-gray-500">Génération live selon résultats</span>
+              <div className="group relative shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400 cursor-help" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 px-3 py-2 rounded-lg bg-gray-900 text-white text-[11px] leading-relaxed
+                  opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50 shadow-xl">
+                  Activé : chaque round est généré d'après les résultats du round précédent (format Mexicano). Désactivé : tous les rounds sont calculés à l'avance depuis le classement initial.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => updatePhaseConfig(nodeId, { liveGeneration: !config.liveGeneration })}
+              className={`relative shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200
+                ${config.liveGeneration ? 'bg-sky-500' : 'bg-gray-200'}`}
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200
+                  ${config.liveGeneration ? 'translate-x-4.5' : 'translate-x-0.5'}`}
+              />
+            </button>
+          </div>
+        </>
       )}
 
       {/* Nombre de sets (pas pour team_builder/team_splitter) */}
@@ -217,22 +278,33 @@ function PanelContent({
       {config.type !== 'match_simple' && config.type !== 'americana_single' && config.type !== 'team_builder' && config.type !== 'team_splitter' && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">
-            Nombre d'équipes (entrées)
+            {config.type === 'americana_weighted' ? 'Nombre de joueurs' : 'Nombre d\'équipes (entrées)'}
           </label>
           <input
             type="number"
-            min={2}
+            min={config.type === 'americana_weighted' ? 4 : 2}
             max={32}
+            step={config.type === 'americana_weighted' ? 4 : 1}
             value={config.inputCount}
-            onChange={(e) =>
-              updatePhaseConfig(nodeId, {
-                inputCount: Math.max(2, Math.min(32, parseInt(e.target.value) || 2)),
-              })
-            }
+            onChange={(e) => {
+              let val = parseInt(e.target.value) || (config.type === 'americana_weighted' ? 4 : 2)
+              if (config.type === 'americana_weighted') {
+                val = Math.round(val / 4) * 4
+                val = Math.max(4, Math.min(32, val))
+              } else {
+                val = Math.max(2, Math.min(32, val))
+              }
+              updatePhaseConfig(nodeId, { inputCount: val })
+            }}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
               transition-shadow duration-150"
           />
+          {config.type === 'americana_weighted' && (
+            <p className="text-[11px] text-gray-400 mt-1">
+              {config.inputCount} joueurs → {config.inputCount / 2} équipes par round, {config.inputCount / 4} match{config.inputCount / 4 > 1 ? 's' : ''} simultanés
+            </p>
+          )}
         </div>
       )}
 
@@ -365,8 +437,8 @@ function PanelContent({
         </div>
       )}
 
-      {/* Outputs (pas pour team_builder/team_splitter : auto-calculés) */}
-      {config.type !== 'team_builder' && config.type !== 'team_splitter' && <div>
+      {/* Outputs (pas pour team_builder/team_splitter/americana_weighted : auto-calculés) */}
+      {config.type !== 'team_builder' && config.type !== 'team_splitter' && config.type !== 'americana_weighted' && <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-medium text-gray-500">Sorties (classement)</label>
           <button

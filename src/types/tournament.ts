@@ -1,4 +1,4 @@
-export type PhaseType = 'round_robin' | 'elimination' | 'super_americana' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single' | 'best_of' | 'team_builder' | 'team_splitter'
+export type PhaseType = 'round_robin' | 'elimination' | 'super_americana' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single' | 'americana_weighted' | 'best_of' | 'team_builder' | 'team_splitter'
 
 export interface PhaseOutput {
   id: string
@@ -17,7 +17,9 @@ export interface PhaseConfig {
   dureeMatch?: number
   matchType?: 'time_fixed' | 'score_based'
   playerNames?: string
+  topPlayers?: string
   livePlayerManagement?: boolean
+  liveGeneration?: boolean
   restingPlayerIds?: string[]
   batchSize?: number
   completed?: boolean

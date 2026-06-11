@@ -49,7 +49,7 @@ function buildInitialSlots(
     (n) =>
       !graph.edges.some((e) => e.target === n.id) &&
       n.data.config.type !== 'super_americana' &&
-      n.data.config.type !== 'americana_single',
+      n.data.config.type !== 'americana_single' && n.data.config.type !== 'americana_weighted',
   )
 
   for (const node of rootNodes) {
@@ -396,8 +396,10 @@ export default function PlayerAssignmentOverlay({
   const [jsonText, setJsonText] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
-  // americana_single : Map<nodeId, string[]> des noms de joueurs en cours d'édition
+  // americana_single / americana_weighted : Map<nodeId, string[]> des noms de joueurs
   const [americanaPlayers, setAmericanaPlayers] = useState<Map<string, string[]>>(new Map())
+  // americana_weighted : Map<nodeId, Set<playerName>> des joueurs marqués "top player"
+  const [topPlayersMap, setTopPlayersMap] = useState<Map<string, Set<string>>>(new Map())
 
   const slotPlayersRef = useRef<Map<SlotKey, SlotPlayers>>(new Map())
   useEffect(() => { slotPlayersRef.current = slotPlayers }, [slotPlayers])
@@ -406,13 +408,13 @@ export default function PlayerAssignmentOverlay({
     (n) =>
       !graph.edges.some((e) => e.target === n.id) &&
       n.data.config.type !== 'super_americana' &&
-      n.data.config.type !== 'americana_single',
+      n.data.config.type !== 'americana_single' && n.data.config.type !== 'americana_weighted',
   )
 
   const americanaSingleNodes = graph.nodes.filter(
     (n) =>
       !graph.edges.some((e) => e.target === n.id) &&
-      n.data.config.type === 'americana_single',
+      (n.data.config.type === 'americana_single' || n.data.config.type === 'americana_weighted'),
   )
 
   // Charger les joueurs
@@ -462,14 +464,22 @@ export default function PlayerAssignmentOverlay({
     if (!isOpen) return
     setSlotPlayers(buildInitialSlots(graph, matches, teamsMap))
     const am = new Map<string, string[]>()
+    const tp = new Map<string, Set<string>>()
     for (const node of americanaSingleNodes) {
       const names = (node.data.config.playerNames ?? '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
       am.set(node.id, names)
+      if (node.data.config.type === 'americana_weighted') {
+        const tops = new Set(
+          (node.data.config.topPlayers ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+        )
+        tp.set(node.id, tops)
+      }
     }
     setAmericanaPlayers(am)
+    setTopPlayersMap(tp)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
@@ -644,14 +654,36 @@ export default function PlayerAssignmentOverlay({
       next.set(nodeId, (prev.get(nodeId) ?? []).filter((n) => n !== name))
       return next
     })
+    setTopPlayersMap((prev) => {
+      const tops = prev.get(nodeId)
+      if (!tops?.has(name)) return prev
+      const next = new Map(prev)
+      const newSet = new Set(tops)
+      newSet.delete(name)
+      next.set(nodeId, newSet)
+      return next
+    })
   }, [])
 
-  // Sauvegarder les joueurs americana_single dans la config lors de la confirmation
+  const toggleTopPlayer = useCallback((nodeId: string, name: string) => {
+    setTopPlayersMap((prev) => {
+      const next = new Map(prev)
+      const tops = new Set(prev.get(nodeId) ?? [])
+      if (tops.has(name)) tops.delete(name)
+      else tops.add(name)
+      next.set(nodeId, tops)
+      return next
+    })
+  }, [])
+
+  // Sauvegarder les joueurs dans la config lors de la confirmation
   const handleConfirm = useCallback(async () => {
     for (const [nodeId, names] of americanaPlayers) {
+      const tops = topPlayersMap.get(nodeId)
       updatePhaseConfig(nodeId, {
         playerNames: names.join(', '),
         inputCount: names.length,
+        ...(tops !== undefined ? { topPlayers: [...tops].join(', ') } : {}),
       })
     }
     if (americanaPlayers.size > 0) await saveTournament()
@@ -995,7 +1027,7 @@ export default function PlayerAssignmentOverlay({
         ) : (
           <div className="space-y-10">
 
-            {/* Section : phases americana_single */}
+            {/* Section : phases americana_single + americana_weighted */}
             {americanaSingleNodes.length > 0 && (
               <section>
                 <div className="flex items-center gap-3 mb-5">
@@ -1007,6 +1039,7 @@ export default function PlayerAssignmentOverlay({
 
                 <div className="flex gap-6 flex-wrap items-start">
                   {americanaSingleNodes.map((node) => {
+                    const isWeighted = node.data.config.type === 'americana_weighted'
                     const players = americanaPlayers.get(node.id) ?? []
                     const assignedInThisPhase = new Set(players)
 
@@ -1016,27 +1049,51 @@ export default function PlayerAssignmentOverlay({
                           <h2 className="text-sm font-semibold text-gray-800">{node.data.config.name}</h2>
                           <span className="text-xs text-gray-400">{players.length} joueur{players.length !== 1 ? 's' : ''}</span>
                         </div>
+                        {isWeighted && (
+                          <p className="text-[11px] text-sky-600 font-medium mb-2">
+                            ↑ Du plus fort au plus faible
+                          </p>
+                        )}
 
-                        <div className="rounded-xl border border-teal-200 bg-teal-50/30 p-3 space-y-2">
-                          {players.map((name, idx) => (
-                            <SinglePlayerSlot
-                              key={idx}
-                              playerName={name}
-                              allPlayers={allPlayers}
-                              assignedNames={assignedInThisPhase}
-                              onAssign={(newName) => {
-                                setAmericanaPlayers((prev) => {
-                                  const next = new Map(prev)
-                                  const list = [...(prev.get(node.id) ?? [])]
-                                  list[idx] = newName
-                                  next.set(node.id, list)
-                                  return next
-                                })
-                              }}
-                              onRemove={() => handleAmericanaRemovePlayer(node.id, name)}
-                              onCreateAndAssign={async (n) => { await handleAmericanaAddPlayer(node.id, n) }}
-                            />
-                          ))}
+                        <div className={`rounded-xl border p-3 space-y-2 ${isWeighted ? 'border-sky-200 bg-sky-50/30' : 'border-teal-200 bg-teal-50/30'}`}>
+                          {players.map((name, idx) => {
+                            const isTop = isWeighted && !!(topPlayersMap.get(node.id)?.has(name))
+                            return (
+                              <div key={idx} className="flex items-center gap-1.5">
+                                {isWeighted && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleTopPlayer(node.id, name)}
+                                    title={isTop ? 'Retirer top player' : 'Marquer top player'}
+                                    className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-md transition-colors duration-150
+                                      ${isTop ? 'text-amber-500 bg-amber-50 border border-amber-300 hover:bg-amber-100' : 'text-gray-300 hover:text-amber-400 hover:bg-amber-50'}`}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
+                                  </button>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <SinglePlayerSlot
+                                    playerName={name}
+                                    allPlayers={allPlayers}
+                                    assignedNames={assignedInThisPhase}
+                                    onAssign={(newName) => {
+                                      setAmericanaPlayers((prev) => {
+                                        const next = new Map(prev)
+                                        const list = [...(prev.get(node.id) ?? [])]
+                                        list[idx] = newName
+                                        next.set(node.id, list)
+                                        return next
+                                      })
+                                    }}
+                                    onRemove={() => handleAmericanaRemovePlayer(node.id, name)}
+                                    onCreateAndAssign={async (n) => { await handleAmericanaAddPlayer(node.id, n) }}
+                                  />
+                                </div>
+                              </div>
+                            )
+                          })}
                           {/* Slot vide pour ajouter */}
                           <SinglePlayerSlot
                             playerName={null}

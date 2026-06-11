@@ -407,6 +407,153 @@ function generateAmericanoMatches(
 }
 
 // ---------------------------------------------------------------------------
+// Americana Weighted / Mexicano : appariements équilibrés par rang de force
+// ---------------------------------------------------------------------------
+
+/**
+ * Génère les équipes et les matchs d'un round selon l'algorithme "snake pondéré".
+ * players[0] = joueur le plus fort, players[N-1] = le plus faible.
+ * Chaque appel avec le même tableau et un roundIndex différent produit des
+ * équipes distinctes (aucun doublon de partenaires pour roundIndex < N/2).
+ */
+// Énumère tous les appariements parfaits d'un tableau de taille paire.
+// Limité aux cas ≤ 12 équipes (10395 matchings max) pour rester rapide.
+function allPerfectMatchings<T>(items: T[]): [T, T][][] {
+  if (items.length === 0) return [[]]
+  if (items.length > 12) return [] // fallback : trop grand pour énumérer
+  const [first, ...rest] = items
+  const result: [T, T][][] = []
+  for (let i = 0; i < rest.length; i++) {
+    const partner = rest[i]
+    const remaining = rest.filter((_, j) => j !== i)
+    for (const sub of allPerfectMatchings(remaining)) {
+      result.push([[first, partner], ...sub])
+    }
+  }
+  return result
+}
+
+export function snakeWeightedRound(
+  players: string[],
+  roundIndex: number,
+  topPlayerSet?: Set<string>,
+): { team1: [string, string]; team2: [string, string] }[] {
+  const n = players.length
+  if (n < 4 || n % 2 !== 0) return []
+  const half = Math.floor(n / 2)
+  const top = players.slice(0, half)                        // [0..half-1]
+  const bot = players.slice(half).reverse()                 // [N-1..half] inversé
+
+  // Former half équipes (snake)
+  const teams: [string, string][] = []
+  for (let i = 0; i < half; i++) {
+    teams.push([top[i], bot[(i + roundIndex) % half]])
+  }
+
+  // Trier par indice de force combiné
+  const rankOf = (name: string) => players.indexOf(name)
+  teams.sort((a, b) => (rankOf(a[0]) + rankOf(a[1])) - (rankOf(b[0]) + rankOf(b[1])))
+
+  const hasTop = (t: [string, string]) =>
+    !!(topPlayerSet && (topPlayerSet.has(t[0]) || topPlayerSet.has(t[1])))
+
+  // Score d'un appariement : [conflits top-vs-top, déséquilibre de rang total]
+  type Pairing = [T: [string, string], U: [string, string]][]
+  const scorePairing = (pairs: Pairing): [number, number] => {
+    let conflicts = 0
+    let imbalance = 0
+    for (const [t1, t2] of pairs) {
+      if (hasTop(t1) && hasTop(t2)) conflicts++
+      imbalance += Math.abs(
+        (rankOf(t1[0]) + rankOf(t1[1])) - (rankOf(t2[0]) + rankOf(t2[1]))
+      )
+    }
+    return [conflicts, imbalance]
+  }
+
+  let bestPairs: [string, string][][]
+  if (topPlayerSet && topPlayerSet.size > 0 && teams.length <= 12) {
+    // Chercher le meilleur appariement parmi toutes les combinaisons parfaites
+    const matchings = allPerfectMatchings(teams)
+    let bestScore: [number, number] = [Infinity, Infinity]
+    bestPairs = []
+    for (const m of matchings) {
+      const s = scorePairing(m)
+      if (s[0] < bestScore[0] || (s[0] === bestScore[0] && s[1] < bestScore[1])) {
+        bestScore = s
+        bestPairs = m
+      }
+    }
+  } else {
+    // Appariement adjacent par défaut (déjà optimal sans contrainte top)
+    bestPairs = []
+    for (let i = 0; i + 1 < teams.length; i += 2) {
+      bestPairs.push([teams[i], teams[i + 1]])
+    }
+  }
+
+  return (bestPairs as [string, string][][]).map(([t1, t2]) => ({
+    team1: t1 as [string, string],
+    team2: t2 as [string, string],
+  }))
+}
+
+function generateWeightedAmericanoMatches(
+  node: SerializedNode,
+  tournamentId: string,
+): NewMatch[] {
+  const { config } = node.data
+  const rounds = config.roundCount ?? 3
+
+  // Utiliser les noms saisis ou générer des noms par défaut d'après inputCount
+  const namedPlayers = (config.playerNames ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  const count = namedPlayers.length >= 4 ? namedPlayers.length : config.inputCount
+  const players = namedPlayers.length >= 4
+    ? namedPlayers
+    : Array.from({ length: count }, (_, i) => `Joueur ${i + 1}`)
+
+  if (players.length < 4) return []
+
+  const topPlayerSet = new Set(
+    (config.topPlayers ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  )
+
+  const matches: NewMatch[] = []
+  let ordre = 1
+
+  // Mode statique : on génère tous les rounds d'avance avec roundIndex = r
+  // Mode live : on génère uniquement le round 1 (roundIndex = 0)
+  const maxRounds = config.liveGeneration ? 1 : rounds
+
+  for (let r = 0; r < maxRounds; r++) {
+    const roundMatches = snakeWeightedRound(players, r, topPlayerSet.size > 0 ? topPlayerSet : undefined)
+    for (let m = 0; m < roundMatches.length; m++) {
+      const { team1, team2 } = roundMatches[m]
+      matches.push({
+        tournament_id: tournamentId,
+        phase_node_id: node.id,
+        nom: `Round ${r + 1} Match ${m + 1} de ${config.name}`,
+        statut: 'a_jouer',
+        equipe1_id: null,
+        equipe2_id: null,
+        equipe1_label: `${team1[0]} / ${team1[1]}`,
+        equipe2_label: `${team2[0]} / ${team2[1]}`,
+        horaire: null,
+        piste: null,
+        ordre,
+        round: r + 1,
+        score_equipe1: null,
+        score_equipe2: null,
+        finished_at: null,
+      })
+      ordre++
+    }
+  }
+
+  return matches
+}
+
+// ---------------------------------------------------------------------------
 // Match simple : un seul match entre 2 équipes
 // ---------------------------------------------------------------------------
 
@@ -489,13 +636,14 @@ function generateTournantreLibreMatches(
  * sont retournés (round robin: tous, élimination: round 1 uniquement).
  */
 export function computeInputSlotPairs(
-  phaseType: 'round_robin' | 'elimination' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single' | 'best_of' | 'team_builder' | 'team_splitter',
+  phaseType: 'round_robin' | 'elimination' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single' | 'americana_weighted' | 'best_of' | 'team_builder' | 'team_splitter',
   inputCount: number,
   roundCount?: number,
 ): { ordre: number; slot1: number; slot2: number }[] {
   const pairs: { ordre: number; slot1: number; slot2: number }[] = []
 
   if (phaseType === 'best_of') return pairs
+  if (phaseType === 'americana_weighted') return pairs
 
   if (phaseType === 'match_simple') {
     return [{ ordre: 1, slot1: 1, slot2: 2 }]
@@ -660,7 +808,7 @@ function assignScheduleToMatches(
     const hasTimingConfig = heureDebutMin !== null && dureeMatch > 0
 
     // Rounds indépendants (round_robin, americano) vs séquentiels (élimination…)
-    const freeRoundTypes = new Set(['round_robin', 'americano'])
+    const freeRoundTypes = new Set(['round_robin', 'americano', 'americana_weighted'])
 
     // Index round → matchs par phase
     const phaseRoundMap = new Map<string, Map<number, NewMatch[]>>()
@@ -788,6 +936,11 @@ export function generateAllMatches(
     if (node.data.config.type === 'best_of') continue
     if (node.data.config.type === 'team_builder') continue
     if (node.data.config.type === 'team_splitter') continue
+
+    if (node.data.config.type === 'americana_weighted') {
+      allMatches.push(...generateWeightedAmericanoMatches(node, tournamentId))
+      continue
+    }
 
     const provenances = provenanceMap.get(node.id) ?? []
     const isRoot = !graph.edges.some((e) => e.target === node.id)
