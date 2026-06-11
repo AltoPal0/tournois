@@ -181,6 +181,8 @@ export default function TournamentMatchesPage() {
     [nodes, edges],
   )
 
+  const INVISIBLE_PHASE_TYPES: PhaseType[] = ['best_of', 'team_builder', 'team_splitter', 'super_americana']
+
   const sortedPhases = useMemo(() => {
     if (nodes.length === 0) return []
     return topologicalSort(graph)
@@ -189,6 +191,7 @@ export default function TournamentMatchesPage() {
         name: n.data.config.name,
         type: n.data.config.type as PhaseType,
       }))
+      .filter((p) => !INVISIBLE_PHASE_TYPES.includes(p.type))
   }, [nodes, graph])
 
   useEffect(() => {
