@@ -23,7 +23,7 @@ function buildSlotMap(
   matches: Match[],
   roundCount?: number,
 ): Map<number, string | null> {
-  if (type === 'super_americana' || type === 'americana_single' || type === 'best_of') return new Map()
+  if (type === 'super_americana' || type === 'americana_single' || type === 'best_of' || type === 'team_builder' || type === 'team_splitter') return new Map()
   const pairs = computeInputSlotPairs(type, inputCount, roundCount)
   const phaseMatches = matches.filter((m) => m.phase_node_id === phaseNodeId)
   const slotMap = new Map<number, string | null>()

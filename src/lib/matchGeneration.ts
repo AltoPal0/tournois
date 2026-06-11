@@ -489,7 +489,7 @@ function generateTournantreLibreMatches(
  * sont retournés (round robin: tous, élimination: round 1 uniquement).
  */
 export function computeInputSlotPairs(
-  phaseType: 'round_robin' | 'elimination' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single' | 'best_of',
+  phaseType: 'round_robin' | 'elimination' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single' | 'best_of' | 'team_builder' | 'team_splitter',
   inputCount: number,
   roundCount?: number,
 ): { ordre: number; slot1: number; slot2: number }[] {

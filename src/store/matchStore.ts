@@ -409,7 +409,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
     for (const node of rootNodes) {
       const { type, inputCount } = node.data.config
-      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single' | 'best_of'>, inputCount, node.data.config.roundCount)
+      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single' | 'best_of' | 'team_builder' | 'team_splitter'>, inputCount, node.data.config.roundCount)
       const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
 
       const slotToTeam = new Map<number, string | null>()
@@ -441,7 +441,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const allUpdates: PromiseLike<unknown>[] = []
     for (const node of rootNodes) {
       const { type, inputCount } = node.data.config
-      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single' | 'best_of'>, inputCount, node.data.config.roundCount)
+      const pairs = computeInputSlotPairs(type as Exclude<typeof type, 'super_americana' | 'americana_single' | 'best_of' | 'team_builder' | 'team_splitter'>, inputCount, node.data.config.roundCount)
       const phaseMatches = currentMatches.filter((m) => m.phase_node_id === node.id)
 
       for (const pair of pairs) {
@@ -600,7 +600,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   assignTeamToPhaseSlot: async (tournamentId, phaseNodeId, slot, teamId) => {
     const { nodes } = useTournamentStore.getState()
     const node = nodes.find((n) => n.id === phaseNodeId)
-    if (!node || node.data.config.type === 'super_americana' || node.data.config.type === 'americana_single' || node.data.config.type === 'best_of') return
+    if (!node || node.data.config.type === 'super_americana' || node.data.config.type === 'americana_single' || node.data.config.type === 'best_of' || node.data.config.type === 'team_builder' || node.data.config.type === 'team_splitter') return
 
     const { type, inputCount } = node.data.config
     const pairs = computeInputSlotPairs(type, inputCount, node.data.config.roundCount)
@@ -813,9 +813,6 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
     const pistes = tournamentConfig?.pistes ?? []
     const restingPlayerIds = node.data.config.restingPlayerIds ?? []
-    const activePlayers = restingPlayerIds.length
-      ? playerIds.filter((id) => !restingPlayerIds.includes(id))
-      : playerIds
     const batchSize = node.data.config.batchSize ?? 3
     if (batchSize === 0) return
 
