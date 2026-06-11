@@ -53,6 +53,7 @@ export default function TournamentMatchesPage() {
   const [extraPlayers, setExtraPlayers] = useState<{ id: string; prenom: string }[]>([])
   const [isRosterOpen, setIsRosterOpen] = useState(false)
   const [isTerminating, setIsTerminating] = useState(false)
+  const [showTerminateConfirm, setShowTerminateConfirm] = useState(false)
   const onboardingCheckDone = useRef(false)
 
   const { identity, setIdentity, clearIdentity, findMyTeam } = usePlayerIdentity(id ?? '')
@@ -348,6 +349,25 @@ export default function TournamentMatchesPage() {
 
         {/* Icônes droite */}
         <div className="flex items-center gap-1">
+          {/* Bouton Terminer l'americana — dans le header pour visibilité mobile */}
+          {activePhase?.type === 'americana_single' &&
+            !(nodes.find((n) => n.id === activePhase.id)?.data.config.completed) && (
+            <button
+              onClick={() => setShowTerminateConfirm(true)}
+              disabled={isTerminating}
+              className="shrink-0 h-8 px-2.5 flex items-center gap-1 rounded-lg text-xs font-semibold
+                text-amber-300 border border-amber-400/40 bg-amber-400/10
+                hover:bg-amber-400/20 active:scale-90 transition-all duration-150
+                disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Terminer l'americana"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className={`${hdrIcon} shrink-0`} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              <span className="hidden sm:inline">Terminer</span>
+            </button>
+          )}
+
           {/* Engrenage roster americana_single */}
           {isActive && activePhase?.type === 'americana_single' &&
             nodes.find((n) => n.id === activePhase.id)?.data.config.livePlayerManagement && (
@@ -584,6 +604,43 @@ export default function TournamentMatchesPage() {
             setShowOnboarding(false)
           }}
         />
+      )}
+
+      {/* Confirmation terminer l'americana */}
+      {showTerminateConfirm && activePhase?.type === 'americana_single' && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-6"
+          onClick={() => setShowTerminateConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-base font-bold text-gray-900 mb-1">Terminer l'americana ?</p>
+            <p className="text-sm text-gray-500 mb-6">Le classement sera figé et la phase marquée comme terminée.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTerminateConfirm(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={async () => {
+                  setShowTerminateConfirm(false)
+                  setIsTerminating(true)
+                  try { await terminateAmericanaSinglePhase(activePhase.id) }
+                  finally { setIsTerminating(false) }
+                }}
+                disabled={isTerminating}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600
+                  disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                {isTerminating ? 'Clôture…' : 'Oui, terminer'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Burger — navigation entre phases */}
