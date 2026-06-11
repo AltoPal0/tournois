@@ -628,6 +628,8 @@ function assignScheduleToMatches(
     if (node.data.config.type === 'super_americana') continue
     if (node.data.config.type === 'americana_single') continue
     if (node.data.config.type === 'best_of') continue
+    if (node.data.config.type === 'team_builder') continue
+    if (node.data.config.type === 'team_splitter') continue
     const d = depths.get(node.id) ?? 0
     if (!byDepth.has(d)) byDepth.set(d, [])
     byDepth.get(d)!.push(node.id)
@@ -784,6 +786,8 @@ export function generateAllMatches(
     if (node.data.config.type === 'super_americana') continue
     if (node.data.config.type === 'americana_single') continue
     if (node.data.config.type === 'best_of') continue
+    if (node.data.config.type === 'team_builder') continue
+    if (node.data.config.type === 'team_splitter') continue
 
     const provenances = provenanceMap.get(node.id) ?? []
     const isRoot = !graph.edges.some((e) => e.target === node.id)

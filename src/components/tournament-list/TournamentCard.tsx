@@ -28,16 +28,20 @@ export default function TournamentCard({ tournament }: Props) {
     : null
 
   const status = tournament.status ?? 'draft'
+  const isCompleted = status === 'completed'
 
   return (
     <div
       onClick={() => navigate(`/tournament/${tournament.id}/matches`)}
-      className="group relative bg-white rounded-2xl border border-gray-100 overflow-hidden cursor-pointer
-        shadow-sm transition-all duration-200 hover:-translate-y-1.5 hover:shadow-xl hover:border-gray-200"
+      className={`group relative bg-white rounded-2xl border overflow-hidden cursor-pointer
+        shadow-sm transition-all duration-200
+        ${isCompleted
+          ? 'border-gray-100 opacity-70 hover:opacity-100 hover:shadow-md'
+          : 'border-gray-100 hover:-translate-y-1.5 hover:shadow-xl hover:border-gray-200'}`}
     >
       {/* Header */}
       <div className="flex items-start justify-between px-4 pt-4 pb-3">
-        <h3 className="text-base font-semibold text-gray-900 leading-snug pr-2 line-clamp-2">
+        <h3 className={`text-base font-semibold leading-snug pr-2 line-clamp-2 ${isCompleted ? 'text-gray-500' : 'text-gray-900'}`}>
           {tournament.name}
         </h3>
 

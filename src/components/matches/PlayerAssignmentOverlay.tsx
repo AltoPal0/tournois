@@ -46,7 +46,10 @@ function buildInitialSlots(
 ): Map<SlotKey, SlotPlayers> {
   const state = new Map<SlotKey, SlotPlayers>()
   const rootNodes = graph.nodes.filter(
-    (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
+    (n) =>
+      !graph.edges.some((e) => e.target === n.id) &&
+      n.data.config.type !== 'super_americana' &&
+      n.data.config.type !== 'americana_single',
   )
 
   for (const node of rootNodes) {
@@ -86,6 +89,7 @@ function PlayerPosition({
   assignedPlayerIds,
   onAssign,
   onRemove,
+  onCreateAndAssign,
 }: {
   position: 1 | 2
   playerId: string | null
@@ -93,9 +97,11 @@ function PlayerPosition({
   assignedPlayerIds: Set<string>
   onAssign: (playerId: string) => void
   onRemove: () => void
+  onCreateAndAssign?: (name: string) => Promise<void>
 }) {
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const player = playerId ? allPlayers.find((p) => p.id === playerId) : null
@@ -108,16 +114,29 @@ function PlayerPosition({
       )
     : allPlayers.filter((p) => !assignedPlayerIds.has(p.id) || p.id === playerId)
 
+  const showCreateOption =
+    onCreateAndAssign &&
+    query.trim().length >= 3 &&
+    filtered.length === 0 &&
+    !isCreating
+
   const handleStartSearch = () => {
     setQuery('')
     setSearching(true)
     setTimeout(() => inputRef.current?.focus(), 30)
   }
 
-  // onMouseDown + e.preventDefault() empêche le blur de l'input de se déclencher
-  // avant que handleSelect soit appelé — c'était la cause du bug d'autocomplete
   const handleSelect = (p: Joueur) => {
     onAssign(p.id)
+    setSearching(false)
+    setQuery('')
+  }
+
+  const handleCreate = async () => {
+    if (!onCreateAndAssign) return
+    setIsCreating(true)
+    await onCreateAndAssign(query.trim())
+    setIsCreating(false)
     setSearching(false)
     setQuery('')
   }
@@ -153,9 +172,12 @@ function PlayerPosition({
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onBlur={() => setTimeout(() => setSearching(false), 150)}
-            onKeyDown={(e) => { if (e.key === 'Escape') setSearching(false) }}
-            placeholder="Chercher un joueur…"
+            onBlur={() => setTimeout(() => { if (!isCreating) setSearching(false) }, 150)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setSearching(false); setQuery('') }
+              if (e.key === 'Enter' && showCreateOption) void handleCreate()
+            }}
+            placeholder="Chercher ou créer un joueur…"
             className="flex-1 text-sm text-gray-900 outline-none bg-transparent placeholder-gray-400"
           />
           <button
@@ -167,13 +189,12 @@ function PlayerPosition({
             </svg>
           </button>
         </div>
-        {filtered.length > 0 && (
+        {(filtered.length > 0 || showCreateOption) && (
           <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200
             rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
             {filtered.slice(0, 12).map((p) => (
               <button
                 key={p.id}
-                // e.preventDefault() empêche le blur de l'input → handleSelect s'exécute correctement
                 onMouseDown={(e) => { e.preventDefault(); handleSelect(p) }}
                 className="w-full text-left px-4 py-2.5 text-sm text-gray-800 hover:bg-blue-50
                   hover:text-blue-700 transition-colors duration-100 first:rounded-t-xl last:rounded-b-xl"
@@ -181,6 +202,19 @@ function PlayerPosition({
                 {p.prenom}
               </button>
             ))}
+            {showCreateOption && (
+              <button
+                onMouseDown={(e) => { e.preventDefault(); void handleCreate() }}
+                className="w-full text-left px-4 py-2.5 text-sm text-emerald-700 bg-emerald-50
+                  hover:bg-emerald-100 transition-colors duration-100 flex items-center gap-2
+                  first:rounded-t-xl last:rounded-b-xl border-t border-gray-100"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                Créer « {query.trim()} »
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -197,6 +231,136 @@ function PlayerPosition({
       <div className="h-5 w-5 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
         <span className="text-[10px] font-bold text-gray-400">{position}</span>
       </div>
+      <span className="text-sm text-gray-400 italic">Ajouter un joueur…</span>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Composant : slot joueur individuel (americana_single)
+// ---------------------------------------------------------------------------
+
+function SinglePlayerSlot({
+  playerName,
+  allPlayers,
+  assignedNames,
+  onAssign,
+  onRemove,
+  onCreateAndAssign,
+}: {
+  playerName: string | null
+  allPlayers: Joueur[]
+  assignedNames: Set<string>
+  onAssign: (name: string) => void
+  onRemove: () => void
+  onCreateAndAssign: (name: string) => Promise<void>
+}) {
+  const [searching, setSearching] = useState(false)
+  const [query, setQuery] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const filtered = query.trim().length > 0
+    ? allPlayers.filter(
+        (p) =>
+          p.prenom.toLowerCase().includes(query.toLowerCase()) &&
+          (!assignedNames.has(p.prenom) || p.prenom === playerName),
+      )
+    : allPlayers.filter((p) => !assignedNames.has(p.prenom) || p.prenom === playerName)
+
+  const showCreateOption = query.trim().length >= 3 && filtered.length === 0 && !isCreating
+
+  const handleCreate = async () => {
+    setIsCreating(true)
+    await onCreateAndAssign(query.trim())
+    setIsCreating(false)
+    setSearching(false)
+    setQuery('')
+  }
+
+  if (playerName && !searching) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 bg-teal-50 rounded-lg">
+        <div className="h-2 w-2 rounded-full bg-teal-400 shrink-0" />
+        <span className="text-sm font-medium text-teal-900 flex-1 truncate">{playerName}</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemove() }}
+          className="p-0.5 rounded text-teal-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+          title="Retirer ce joueur"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+      </div>
+    )
+  }
+
+  if (searching) {
+    return (
+      <div className="relative">
+        <div className="flex items-center gap-2 px-3 py-2 border border-teal-400 rounded-lg bg-white shadow-sm">
+          <div className="h-2 w-2 rounded-full bg-gray-300 shrink-0" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onBlur={() => setTimeout(() => { if (!isCreating) setSearching(false) }, 150)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setSearching(false); setQuery('') }
+              if (e.key === 'Enter' && showCreateOption) void handleCreate()
+            }}
+            placeholder="Chercher ou créer un joueur…"
+            className="flex-1 text-sm text-gray-900 outline-none bg-transparent placeholder-gray-400"
+          />
+          <button
+            onMouseDown={(e) => { e.preventDefault(); setSearching(false); setQuery('') }}
+            className="text-gray-300 hover:text-gray-500 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+        {(filtered.length > 0 || showCreateOption) && (
+          <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200
+            rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+            {filtered.slice(0, 12).map((p) => (
+              <button
+                key={p.id}
+                onMouseDown={(e) => { e.preventDefault(); onAssign(p.prenom); setSearching(false); setQuery('') }}
+                className="w-full text-left px-4 py-2.5 text-sm text-gray-800 hover:bg-teal-50
+                  hover:text-teal-700 transition-colors duration-100 first:rounded-t-xl last:rounded-b-xl"
+              >
+                {p.prenom}
+              </button>
+            ))}
+            {showCreateOption && (
+              <button
+                onMouseDown={(e) => { e.preventDefault(); void handleCreate() }}
+                className="w-full text-left px-4 py-2.5 text-sm text-emerald-700 bg-emerald-50
+                  hover:bg-emerald-100 transition-colors duration-100 flex items-center gap-2
+                  first:rounded-t-xl last:rounded-b-xl border-t border-gray-100"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                Créer « {query.trim()} »
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <button
+      onClick={() => { setQuery(''); setSearching(true); setTimeout(() => inputRef.current?.focus(), 30) }}
+      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-dashed
+        border-teal-100 hover:border-teal-300 hover:bg-teal-50/50 transition-all duration-150 text-left"
+    >
+      <div className="h-2 w-2 rounded-full bg-gray-200 shrink-0" />
       <span className="text-sm text-gray-400 italic">Ajouter un joueur…</span>
     </button>
   )
@@ -221,6 +385,8 @@ export default function PlayerAssignmentOverlay({
   const clearSlotAssignments = useMatchStore((s) => s.clearSlotAssignments)
   const isAssigning = useMatchStore((s) => s.isAssigning)
   const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
+  const updatePhaseConfig = useTournamentStore((s) => s.updatePhaseConfig)
+  const saveTournament = useTournamentStore((s) => s.saveTournament)
 
   const [allPlayers, setAllPlayers] = useState<Joueur[]>([])
   const [slotPlayers, setSlotPlayers] = useState<Map<SlotKey, SlotPlayers>>(new Map())
@@ -230,30 +396,36 @@ export default function PlayerAssignmentOverlay({
   const [jsonText, setJsonText] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
+  // americana_single : Map<nodeId, string[]> des noms de joueurs en cours d'édition
+  const [americanaPlayers, setAmericanaPlayers] = useState<Map<string, string[]>>(new Map())
 
-  // Ref miroir de slotPlayers pour des lectures fraîches dans les callbacks async
   const slotPlayersRef = useRef<Map<SlotKey, SlotPlayers>>(new Map())
-  useEffect(() => {
-    slotPlayersRef.current = slotPlayers
-  }, [slotPlayers])
+  useEffect(() => { slotPlayersRef.current = slotPlayers }, [slotPlayers])
 
   const rootNodes = graph.nodes.filter(
-    (n) => !graph.edges.some((e) => e.target === n.id) && n.data.config.type !== 'super_americana' && n.data.config.type !== 'americana_single',
+    (n) =>
+      !graph.edges.some((e) => e.target === n.id) &&
+      n.data.config.type !== 'super_americana' &&
+      n.data.config.type !== 'americana_single',
   )
 
-  // Charger les joueurs (filtrés par inscrits si défini, avec création auto des manquants)
+  const americanaSingleNodes = graph.nodes.filter(
+    (n) =>
+      !graph.edges.some((e) => e.target === n.id) &&
+      n.data.config.type === 'americana_single',
+  )
+
+  // Charger les joueurs
   useEffect(() => {
     if (!isOpen) return
     const inscrits = tournamentConfig.joueursInscrits
 
     if (!inscrits || inscrits.length === 0) {
-      supabase
-        .from('tt_joueurs')
-        .select('id, prenom, created_at')
-        .order('prenom')
-        .then(({ data }) => {
-          if (data) setAllPlayers(data as Joueur[])
-        })
+      async function loadAll() {
+        const { data } = await supabase.from('tt_joueurs').select('id, prenom, created_at').order('prenom')
+        setAllPlayers((data ?? []) as Joueur[])
+      }
+      void loadAll()
       return
     }
 
@@ -267,11 +439,8 @@ export default function PlayerAssignmentOverlay({
 
       for (const name of inscrits!) {
         const found = nameToPlayer.get(name.toLowerCase())
-        if (found) {
-          result.push(found)
-        } else {
-          toCreate.push(name)
-        }
+        if (found) result.push(found)
+        else toCreate.push(name)
       }
 
       if (toCreate.length > 0) {
@@ -282,50 +451,75 @@ export default function PlayerAssignmentOverlay({
         result.push(...((created ?? []) as Joueur[]))
       }
 
-      setAllPlayers(result)
+      setAllPlayers(result.sort((a, b) => a.prenom.localeCompare(b.prenom)))
     }
 
     void loadInscritPlayers()
   }, [isOpen, tournamentConfig.joueursInscrits])
 
-  // Initialiser les slots depuis les matchs — seulement à l'ouverture de l'overlay.
-  // Ne pas mettre matches/teamsMap en dépendances : le store se met à jour pendant les
-  // assignations (équipe null tant que les 2 joueurs ne sont pas choisis), ce qui
-  // déclencherait une réinitialisation et ferait disparaître les joueurs déjà saisis.
+  // Initialiser les slots équipes et les joueurs americana_single
   useEffect(() => {
-    if (isOpen) {
-      setSlotPlayers(buildInitialSlots(graph, matches, teamsMap))
+    if (!isOpen) return
+    setSlotPlayers(buildInitialSlots(graph, matches, teamsMap))
+    const am = new Map<string, string[]>()
+    for (const node of americanaSingleNodes) {
+      const names = (node.data.config.playerNames ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      am.set(node.id, names)
     }
+    setAmericanaPlayers(am)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
-  // Ensemble des joueurs déjà assignés
+  // Ensemble des joueurs assignés (pour éviter les doublons dans la liste)
   const assigned = new Set<string>()
   for (const sp of slotPlayers.values()) {
     if (sp.player1Id) assigned.add(sp.player1Id)
     if (sp.player2Id) assigned.add(sp.player2Id)
   }
+  const assignedAmericanaNames = new Set<string>()
+  for (const names of americanaPlayers.values()) {
+    for (const n of names) assignedAmericanaNames.add(n)
+  }
+
+  // Créer un joueur en DB et l'ajouter à la liste locale
+  const createPlayer = useCallback(async (name: string): Promise<Joueur | null> => {
+    const trimmed = name.trim()
+    if (!trimmed) return null
+    // Chercher si existe déjà
+    const existing = allPlayers.find((p) => p.prenom.toLowerCase() === trimmed.toLowerCase())
+    if (existing) return existing
+    const { data } = await supabase
+      .from('tt_joueurs')
+      .insert({ prenom: trimmed })
+      .select('id, prenom, created_at')
+      .single()
+    if (!data) return null
+    const newPlayer = data as Joueur
+    setAllPlayers((prev) =>
+      [...prev, newPlayer].sort((a, b) => a.prenom.localeCompare(b.prenom)),
+    )
+    return newPlayer
+  }, [allPlayers])
 
   // Assigner ou retirer un joueur d'une position dans un slot
   const applyAssign = useCallback(
     async (phaseNodeId: string, slot: number, position: 1 | 2, newPlayerId: string | null) => {
       const key = slotKey(phaseNodeId, slot)
-
-      // Lire l'état frais depuis le ref (évite les stale closures)
       const current = slotPlayersRef.current.get(key) ?? { player1Id: null, player2Id: null }
       const newSlot: SlotPlayers = {
         player1Id: position === 1 ? newPlayerId : current.player1Id,
         player2Id: position === 2 ? newPlayerId : current.player2Id,
       }
 
-      // Mise à jour optimiste locale immédiate
       setSlotPlayers((prev) => {
         const next = new Map(prev)
         next.set(key, newSlot)
         return next
       })
 
-      // Persistance en DB (sans notifier le parent — évite le rechargement qui écrase l'état local)
       setPendingSlots((prev) => new Set(prev).add(key))
       await assignPlayersToSlot(tournamentId, phaseNodeId, slot, newSlot.player1Id, newSlot.player2Id)
       setPendingSlots((prev) => {
@@ -342,6 +536,16 @@ export default function PlayerAssignmentOverlay({
       void applyAssign(phaseNodeId, slot, position, null)
     },
     [applyAssign],
+  )
+
+  // Créer un joueur et l'assigner à un slot équipe
+  const handleCreateAndAssign = useCallback(
+    async (phaseNodeId: string, slot: number, position: 1 | 2, name: string) => {
+      const player = await createPlayer(name)
+      if (!player) return
+      await applyAssign(phaseNodeId, slot, position, player.id)
+    },
+    [createPlayer, applyAssign],
   )
 
   const handleSwap = useCallback(
@@ -375,15 +579,19 @@ export default function PlayerAssignmentOverlay({
 
   const handleClearAll = useCallback(async () => {
     await clearSlotAssignments(tournamentId)
-    setSlotPlayers(
-      new Map(
-        Array.from(slotPlayersRef.current.keys()).map((k) => [
-          k,
-          { player1Id: null, player2Id: null },
-        ]),
-      ),
-    )
-  }, [clearSlotAssignments, tournamentId])
+    const empty = new Map<SlotKey, SlotPlayers>()
+    for (const node of rootNodes) {
+      for (let s = 1; s <= node.data.config.inputCount; s++) {
+        empty.set(slotKey(node.id, s), { player1Id: null, player2Id: null })
+      }
+    }
+    setSlotPlayers(empty)
+    setAmericanaPlayers((prev) => {
+      const next = new Map<string, string[]>()
+      for (const k of prev.keys()) next.set(k, [])
+      return next
+    })
+  }, [clearSlotAssignments, tournamentId, rootNodes])
 
   const handleRandomAssign = useCallback(async () => {
     await assignRandomTeams(tournamentId, graph)
@@ -392,9 +600,7 @@ export default function PlayerAssignmentOverlay({
       .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
     if (data) {
       const freshTeamsMap = new Map<string, TeamWithJoueurs>()
-      for (const t of data as unknown as TeamWithJoueurs[]) {
-        freshTeamsMap.set(t.id, t)
-      }
+      for (const t of data as unknown as TeamWithJoueurs[]) freshTeamsMap.set(t.id, t)
       const freshMatches = useMatchStore.getState().matches
       setSlotPlayers(buildInitialSlots(graph, freshMatches, freshTeamsMap))
     }
@@ -415,31 +621,85 @@ export default function PlayerAssignmentOverlay({
     onAssignmentChanged()
   }, [tournamentId, graph, seedRandomAssignments, onAssignmentChanged])
 
+  // Gestion americana_single : ajouter/retirer un joueur
+  const handleAmericanaAddPlayer = useCallback(
+    async (nodeId: string, name: string) => {
+      const trimmed = name.trim()
+      if (!trimmed) return
+      await createPlayer(trimmed)
+      setAmericanaPlayers((prev) => {
+        const current = prev.get(nodeId) ?? []
+        if (current.some((n) => n.toLowerCase() === trimmed.toLowerCase())) return prev
+        const next = new Map(prev)
+        next.set(nodeId, [...current, trimmed])
+        return next
+      })
+    },
+    [createPlayer],
+  )
+
+  const handleAmericanaRemovePlayer = useCallback((nodeId: string, name: string) => {
+    setAmericanaPlayers((prev) => {
+      const next = new Map(prev)
+      next.set(nodeId, (prev.get(nodeId) ?? []).filter((n) => n !== name))
+      return next
+    })
+  }, [])
+
+  // Sauvegarder les joueurs americana_single dans la config lors de la confirmation
+  const handleConfirm = useCallback(async () => {
+    for (const [nodeId, names] of americanaPlayers) {
+      updatePhaseConfig(nodeId, {
+        playerNames: names.join(', '),
+        inputCount: names.length,
+      })
+    }
+    if (americanaPlayers.size > 0) await saveTournament()
+    onAssignmentChanged()
+    onClose()
+  }, [americanaPlayers, updatePhaseConfig, saveTournament, onAssignmentChanged, onClose])
+
+  // ---------------------------------------------------------------------------
+  // Import / Export JSON unifié
+  // Format : { phases: [{ name, type, teams?: [...] } | { name, type, players: [...] }] }
+  // ---------------------------------------------------------------------------
+
+  type ExportPhase =
+    | { name: string; type: string; teams: { player1: string; player2: string }[] }
+    | { name: string; type: string; players: string[] }
+
   const handleJsonImport = useCallback(async () => {
     setJsonError(null)
 
-    let parsed: { teams: { player1: string; player2: string }[] }
+    let parsed: { phases: ExportPhase[] }
     try {
       parsed = JSON.parse(jsonText)
     } catch {
       setJsonError('JSON invalide')
       return
     }
-    if (!Array.isArray(parsed?.teams)) {
-      setJsonError('Format invalide — attendu : { "teams": [{ "player1": "…", "player2": "…" }] }')
+    if (!Array.isArray(parsed?.phases)) {
+      setJsonError('Format invalide — attendu : { "phases": [...] }')
       return
     }
 
     setIsImporting(true)
 
-    // Collecter tous les noms uniques
+    // Collecter tous les noms de joueurs pour upsert en une passe
     const allNames = new Set<string>()
-    for (const t of parsed.teams) {
-      if (t.player1?.trim()) allNames.add(t.player1.trim())
-      if (t.player2?.trim()) allNames.add(t.player2.trim())
+    for (const phase of parsed.phases) {
+      if ('teams' in phase) {
+        for (const t of phase.teams) {
+          if (t.player1?.trim()) allNames.add(t.player1.trim())
+          if (t.player2?.trim()) allNames.add(t.player2.trim())
+        }
+      } else if ('players' in phase) {
+        for (const p of phase.players) {
+          if (p?.trim()) allNames.add(p.trim())
+        }
+      }
     }
 
-    // Trouver ou créer les joueurs
     const { data: existingData } = await supabase.from('tt_joueurs').select('id, prenom, created_at')
     const dbPlayers = (existingData ?? []) as Joueur[]
     const nameToPlayer = new Map(dbPlayers.map((p) => [p.prenom.toLowerCase(), p]))
@@ -451,46 +711,52 @@ export default function PlayerAssignmentOverlay({
       if (found) playerMap.set(name, found)
       else toCreate.push(name)
     }
-
     if (toCreate.length > 0) {
       const { data: created } = await supabase
         .from('tt_joueurs')
         .insert(toCreate.map((prenom) => ({ prenom })))
         .select('id, prenom, created_at')
-      for (const p of (created ?? []) as Joueur[]) {
-        playerMap.set(p.prenom, p)
+      for (const p of (created ?? []) as Joueur[]) playerMap.set(p.prenom, p)
+    }
+
+    // Index des nœuds par nom (insensible à la casse)
+    const nodeByName = new Map<string, typeof rootNodes[0]>()
+    for (const node of [...rootNodes, ...americanaSingleNodes]) {
+      nodeByName.set(node.data.config.name.toLowerCase(), node)
+    }
+
+    const newAmericanaPlayers = new Map(americanaPlayers)
+
+    for (const phase of parsed.phases) {
+      const node = nodeByName.get(phase.name.toLowerCase())
+
+      if ('teams' in phase && node && node.data.config.type !== 'americana_single') {
+        // Phase équipes : assigner slot par slot
+        for (let i = 0; i < Math.min(phase.teams.length, node.data.config.inputCount); i++) {
+          const team = phase.teams[i]
+          const p1 = team.player1?.trim() ? playerMap.get(team.player1.trim()) : undefined
+          const p2 = team.player2?.trim() ? playerMap.get(team.player2.trim()) : undefined
+          await assignPlayersToSlot(tournamentId, node.id, i + 1, p1?.id ?? null, p2?.id ?? null)
+        }
+      } else if ('players' in phase && node && node.data.config.type === 'americana_single') {
+        // Phase americana_single : mettre à jour la liste locale (sauvegardée au Confirmer)
+        const names = phase.players.map((p) => p.trim()).filter(Boolean)
+        newAmericanaPlayers.set(node.id, names)
       }
     }
 
-    // Construire la liste ordonnée des slots : node0.slot1, node0.slot2, ..., node1.slot1, ...
-    const slotList: { phaseNodeId: string; slot: number }[] = []
-    for (const node of rootNodes) {
-      for (let s = 1; s <= node.data.config.inputCount; s++) {
-        slotList.push({ phaseNodeId: node.id, slot: s })
-      }
-    }
+    setAmericanaPlayers(newAmericanaPlayers)
 
-    // Assigner chaque équipe JSON au slot correspondant
-    for (let i = 0; i < Math.min(parsed.teams.length, slotList.length); i++) {
-      const team = parsed.teams[i]
-      const p1 = team.player1?.trim() ? playerMap.get(team.player1.trim()) : undefined
-      const p2 = team.player2?.trim() ? playerMap.get(team.player2.trim()) : undefined
-      const { phaseNodeId, slot } = slotList[i]
-      await assignPlayersToSlot(tournamentId, phaseNodeId, slot, p1?.id ?? null, p2?.id ?? null)
-    }
-
-    // Rafraîchir l'état local
+    // Rafraîchir les slots équipes depuis la DB
     const { data: freshTeamsData } = await supabase
       .from('tt_teams')
       .select('id, joueur1:tt_joueurs!joueur1_id(id, prenom), joueur2:tt_joueurs!joueur2_id(id, prenom)')
     if (freshTeamsData) {
       const freshTeamsMap = new Map<string, TeamWithJoueurs>()
       for (const t of freshTeamsData as unknown as TeamWithJoueurs[]) freshTeamsMap.set(t.id, t)
-      const freshMatches = useMatchStore.getState().matches
-      setSlotPlayers(buildInitialSlots(graph, freshMatches, freshTeamsMap))
+      setSlotPlayers(buildInitialSlots(graph, useMatchStore.getState().matches, freshTeamsMap))
     }
 
-    // Mettre à jour la liste des joueurs connus
     setAllPlayers((prev) => {
       const merged = new Map(prev.map((p) => [p.id, p]))
       for (const p of playerMap.values()) merged.set(p.id, p)
@@ -501,11 +767,13 @@ export default function PlayerAssignmentOverlay({
     setShowJsonModal(false)
     setJsonText('')
     onAssignmentChanged()
-  }, [jsonText, rootNodes, assignPlayersToSlot, tournamentId, graph, onAssignmentChanged])
+  }, [jsonText, rootNodes, americanaSingleNodes, americanaPlayers, assignPlayersToSlot, tournamentId, graph, onAssignmentChanged])
 
   const handleExportJson = useCallback(() => {
-    const teams: { player1: string; player2: string }[] = []
+    const phases: ExportPhase[] = []
+
     for (const node of rootNodes) {
+      const teams: { player1: string; player2: string }[] = []
       for (let s = 1; s <= node.data.config.inputCount; s++) {
         const key = slotKey(node.id, s)
         const sp = slotPlayers.get(key) ?? { player1Id: null, player2Id: null }
@@ -513,8 +781,18 @@ export default function PlayerAssignmentOverlay({
         const p2 = sp.player2Id ? allPlayers.find((p) => p.id === sp.player2Id) : null
         teams.push({ player1: p1?.prenom ?? '', player2: p2?.prenom ?? '' })
       }
+      phases.push({ name: node.data.config.name, type: node.data.config.type, teams })
     }
-    const json = JSON.stringify({ teams }, null, 2)
+
+    for (const node of americanaSingleNodes) {
+      phases.push({
+        name: node.data.config.name,
+        type: node.data.config.type,
+        players: americanaPlayers.get(node.id) ?? [],
+      })
+    }
+
+    const json = JSON.stringify({ phases }, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -522,18 +800,14 @@ export default function PlayerAssignmentOverlay({
     a.download = 'equipes.json'
     a.click()
     URL.revokeObjectURL(url)
-  }, [rootNodes, slotPlayers, allPlayers])
+  }, [rootNodes, americanaSingleNodes, slotPlayers, allPlayers, americanaPlayers])
 
-  const handleConfirm = () => {
-    onAssignmentChanged()
-    onClose()
-  }
-
-  const availablePlayers = allPlayers.filter((p) => !assigned.has(p.id))
   const totalSlots = rootNodes.reduce((s, n) => s + n.data.config.inputCount, 0)
   const filledSlots = Array.from(slotPlayers.values()).filter(
     (sp) => sp.player1Id !== null && sp.player2Id !== null,
   ).length
+
+  const hasAnySections = rootNodes.length > 0 || americanaSingleNodes.length > 0
 
   if (!isOpen) return null
 
@@ -585,7 +859,7 @@ export default function PlayerAssignmentOverlay({
 
         <button
           onClick={handleExportJson}
-          disabled={isAssigning || filledSlots === 0}
+          disabled={isAssigning}
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium
             border border-gray-200 text-gray-600 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-600
             transition-all duration-200 disabled:opacity-40"
@@ -633,7 +907,7 @@ export default function PlayerAssignmentOverlay({
         </button>
 
         <button
-          onClick={handleConfirm}
+          onClick={() => void handleConfirm()}
           className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-semibold
             bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200 shadow-sm"
         >
@@ -644,51 +918,25 @@ export default function PlayerAssignmentOverlay({
         </button>
       </div>
 
-      {/* Barre d'avancement + joueurs disponibles */}
-      <div className="border-b border-gray-100 px-6 py-3 bg-gray-50 shrink-0">
-        {/* Progression */}
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Équipes complètes
-          </span>
-          <span className="text-xs font-semibold text-gray-700">
-            {filledSlots} / {totalSlots}
-          </span>
-          <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-500 rounded-full transition-all duration-300"
-              style={{ width: totalSlots > 0 ? `${(filledSlots / totalSlots) * 100}%` : '0%' }}
-            />
+      {/* Barre d'avancement (seulement pour les phases équipes) */}
+      {rootNodes.length > 0 && (
+        <div className="border-b border-gray-100 px-6 py-2.5 bg-gray-50 shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Équipes complètes
+            </span>
+            <span className="text-xs font-semibold text-gray-700">
+              {filledSlots} / {totalSlots}
+            </span>
+            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                style={{ width: totalSlots > 0 ? `${(filledSlots / totalSlots) * 100}%` : '0%' }}
+              />
+            </div>
           </div>
         </div>
-
-        {/* Joueurs disponibles */}
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-xs text-gray-400 uppercase tracking-wider">
-            Disponibles
-          </span>
-          <span className="text-xs text-gray-400">
-            ({availablePlayers.length} / {allPlayers.length})
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1.5 min-h-[28px]">
-          {availablePlayers.length === 0 ? (
-            <span className="text-xs text-gray-400 italic self-center">
-              Tous les joueurs sont assignés
-            </span>
-          ) : (
-            availablePlayers.map((p) => (
-              <span
-                key={p.id}
-                className="px-2.5 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600
-                  shadow-sm"
-              >
-                {p.prenom}
-              </span>
-            ))
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Modal import JSON */}
       {showJsonModal && (
@@ -696,54 +944,41 @@ export default function PlayerAssignmentOverlay({
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col">
             <div className="flex items-center justify-between px-6 pt-5 pb-3">
               <h3 className="text-base font-semibold text-gray-900">Importer des équipes</h3>
-              <button
-                onClick={() => setShowJsonModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-              >
+              <button onClick={() => setShowJsonModal(false)} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
               </button>
             </div>
-
             <div className="px-6 pb-2">
               <p className="text-xs text-gray-500 mb-2">
-                Collez un JSON de la forme <code className="bg-gray-100 px-1 rounded">{"{ \"teams\": [{\"player1\": \"…\", \"player2\": \"…\"}] }"}</code>.
-                Les équipes seront assignées dans l'ordre des slots.
+                Collez un JSON exporté par cet écran. Les phases sont matchées par nom.
               </p>
               <textarea
                 value={jsonText}
                 onChange={(e) => { setJsonText(e.target.value); setJsonError(null) }}
-                placeholder={'{\n  "teams": [\n    { "player1": "Alice", "player2": "Bob" }\n  ]\n}'}
+                placeholder={'{\n  "phases": [\n    {\n      "name": "Poule A",\n      "type": "round_robin",\n      "teams": [\n        { "player1": "Alice", "player2": "Bob" }\n      ]\n    },\n    {\n      "name": "Americana 1",\n      "type": "americana_single",\n      "players": ["Carlos", "Diana"]\n    }\n  ]\n}'}
                 rows={12}
                 autoFocus
                 className="w-full px-3 py-2.5 text-xs font-mono border border-gray-200 rounded-xl
                   focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
                   resize-none transition-shadow duration-150"
               />
-              {jsonError && (
-                <p className="text-xs text-red-500 mt-1.5">{jsonError}</p>
-              )}
+              {jsonError && <p className="text-xs text-red-500 mt-1.5">{jsonError}</p>}
             </div>
-
             <div className="px-6 pb-5 pt-3 flex gap-3">
               <button
                 onClick={() => setShowJsonModal(false)}
-                className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200
-                  rounded-xl hover:bg-gray-50 transition-colors"
+                className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 Annuler
               </button>
               <button
                 onClick={() => void handleJsonImport()}
                 disabled={isImporting || !jsonText.trim()}
-                className="flex-1 px-3 py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl
-                  hover:bg-purple-700 transition-colors disabled:opacity-50
-                  flex items-center justify-center gap-2"
+                className="flex-1 px-3 py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {isImporting && (
-                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                )}
+                {isImporting && <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                 {isImporting ? 'Import en cours…' : 'Importer'}
               </button>
             </div>
@@ -751,109 +986,193 @@ export default function PlayerAssignmentOverlay({
         </div>
       )}
 
-      {/* Grille des pools */}
+      {/* Contenu principal */}
       <div className="flex-1 overflow-auto p-6">
-        {rootNodes.length === 0 ? (
+        {!hasAnySections ? (
           <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
             Aucune phase configurée
           </div>
         ) : (
-          <div className="flex gap-6 items-start flex-wrap">
-            {rootNodes.map((node) => {
-              const { name, inputCount } = node.data.config
+          <div className="space-y-10">
 
-              return (
-                <div key={node.id} className="min-w-64 w-64">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-sm font-semibold text-gray-800">{name}</h2>
-                    <span className="text-xs text-gray-400">{inputCount} équipes</span>
+            {/* Section : phases americana_single */}
+            {americanaSingleNodes.length > 0 && (
+              <section>
+                <div className="flex items-center gap-3 mb-5">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-100 text-teal-700">
+                    Joueurs individuels
+                  </span>
+                  <div className="flex-1 h-px bg-teal-100" />
+                </div>
+
+                <div className="flex gap-6 flex-wrap items-start">
+                  {americanaSingleNodes.map((node) => {
+                    const players = americanaPlayers.get(node.id) ?? []
+                    const assignedInThisPhase = new Set(players)
+
+                    return (
+                      <div key={node.id} className="min-w-64 w-64">
+                        <div className="mb-3 flex items-center justify-between">
+                          <h2 className="text-sm font-semibold text-gray-800">{node.data.config.name}</h2>
+                          <span className="text-xs text-gray-400">{players.length} joueur{players.length !== 1 ? 's' : ''}</span>
+                        </div>
+
+                        <div className="rounded-xl border border-teal-200 bg-teal-50/30 p-3 space-y-2">
+                          {players.map((name, idx) => (
+                            <SinglePlayerSlot
+                              key={idx}
+                              playerName={name}
+                              allPlayers={allPlayers}
+                              assignedNames={assignedInThisPhase}
+                              onAssign={(newName) => {
+                                setAmericanaPlayers((prev) => {
+                                  const next = new Map(prev)
+                                  const list = [...(prev.get(node.id) ?? [])]
+                                  list[idx] = newName
+                                  next.set(node.id, list)
+                                  return next
+                                })
+                              }}
+                              onRemove={() => handleAmericanaRemovePlayer(node.id, name)}
+                              onCreateAndAssign={async (n) => { await handleAmericanaAddPlayer(node.id, n) }}
+                            />
+                          ))}
+                          {/* Slot vide pour ajouter */}
+                          <SinglePlayerSlot
+                            playerName={null}
+                            allPlayers={allPlayers}
+                            assignedNames={assignedInThisPhase}
+                            onAssign={(name) => {
+                              setAmericanaPlayers((prev) => {
+                                const next = new Map(prev)
+                                const list = prev.get(node.id) ?? []
+                                if (!list.some((n) => n.toLowerCase() === name.toLowerCase())) {
+                                  next.set(node.id, [...list, name])
+                                }
+                                return next
+                              })
+                            }}
+                            onRemove={() => {}}
+                            onCreateAndAssign={async (n) => { await handleAmericanaAddPlayer(node.id, n) }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* Section : phases équipes (round_robin, elimination, etc.) */}
+            {rootNodes.length > 0 && (
+              <section>
+                {americanaSingleNodes.length > 0 && (
+                  <div className="flex items-center gap-3 mb-5">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                      Équipes
+                    </span>
+                    <div className="flex-1 h-px bg-blue-100" />
                   </div>
+                )}
 
-                  <div className="space-y-2.5">
-                    {Array.from({ length: inputCount }, (_, i) => i + 1).map((slot) => {
-                      const key = slotKey(node.id, slot)
-                      const sp = slotPlayers.get(key) ?? { player1Id: null, player2Id: null }
-                      const isPending = pendingSlots.has(key)
-                      const isComplete = sp.player1Id !== null && sp.player2Id !== null
-                      const isSwapSource = swapSourceKey === key
-                      const isSwapTarget = swapSourceKey !== null && swapSourceKey !== key && isComplete
+                <div className="flex gap-6 items-start flex-wrap">
+                  {rootNodes.map((node) => {
+                    const { name, inputCount } = node.data.config
 
-                      return (
-                        <div
-                          key={slot}
-                          className={`rounded-xl border p-3 space-y-2 transition-all duration-200
-                            ${isSwapSource
-                              ? 'border-amber-300 bg-amber-50/40'
-                              : isSwapTarget
-                              ? 'border-green-300 bg-green-50/30'
-                              : isComplete
-                              ? 'border-blue-200 bg-blue-50/30'
-                              : 'border-gray-200 bg-white'
-                            }
-                            ${isPending ? 'opacity-50 pointer-events-none' : ''}
-                            ${swapSourceKey !== null && !isComplete && !isSwapSource ? 'opacity-40' : ''}
-                          `}
-                        >
-                          <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-xs text-gray-500 font-medium">
-                              Équipe {slot}
-                            </span>
-                            {isPending ? (
-                              <div className="h-3 w-3 border-2 border-blue-300/40 border-t-blue-500 rounded-full animate-spin" />
-                            ) : isSwapSource ? (
-                              <button
-                                onClick={() => setSwapSourceKey(null)}
-                                title="Annuler l'échange"
-                                className="h-5 w-5 rounded-full bg-amber-400 hover:bg-amber-500 flex items-center justify-center transition-colors"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
-                                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                </svg>
-                              </button>
-                            ) : isSwapTarget ? (
-                              <button
-                                onClick={() => void handleSwap(key)}
-                                title="Échanger ces deux équipes"
-                                className="h-5 w-5 rounded-full bg-green-100 hover:bg-green-500 text-green-600 hover:text-white flex items-center justify-center transition-colors group"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                                  <path d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8zM12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 10-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" />
-                                </svg>
-                              </button>
-                            ) : isComplete ? (
-                              <button
-                                onClick={() => setSwapSourceKey(key)}
-                                title="Interchanger cette équipe"
-                                className="h-5 w-5 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center transition-colors"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              </button>
-                            ) : null}
-                          </div>
+                    return (
+                      <div key={node.id} className="min-w-64 w-64">
+                        <div className="mb-3 flex items-center justify-between">
+                          <h2 className="text-sm font-semibold text-gray-800">{name}</h2>
+                          <span className="text-xs text-gray-400">{inputCount} équipes</span>
+                        </div>
 
-                          {([1, 2] as const).map((position) => {
-                            const playerId = position === 1 ? sp.player1Id : sp.player2Id
+                        <div className="space-y-2.5">
+                          {Array.from({ length: inputCount }, (_, i) => i + 1).map((slot) => {
+                            const key = slotKey(node.id, slot)
+                            const sp = slotPlayers.get(key) ?? { player1Id: null, player2Id: null }
+                            const isPending = pendingSlots.has(key)
+                            const isComplete = sp.player1Id !== null && sp.player2Id !== null
+                            const isSwapSource = swapSourceKey === key
+                            const isSwapTarget = swapSourceKey !== null && swapSourceKey !== key && isComplete
+
                             return (
-                              <PlayerPosition
-                                key={position}
-                                position={position}
-                                playerId={playerId}
-                                allPlayers={allPlayers}
-                                assignedPlayerIds={assigned}
-                                onAssign={(pid) => void applyAssign(node.id, slot, position, pid)}
-                                onRemove={() => handleRemove(node.id, slot, position)}
-                              />
+                              <div
+                                key={slot}
+                                className={`rounded-xl border p-3 space-y-2 transition-all duration-200
+                                  ${isSwapSource
+                                    ? 'border-amber-300 bg-amber-50/40'
+                                    : isSwapTarget
+                                    ? 'border-green-300 bg-green-50/30'
+                                    : isComplete
+                                    ? 'border-blue-200 bg-blue-50/30'
+                                    : 'border-gray-200 bg-white'
+                                  }
+                                  ${isPending ? 'opacity-50 pointer-events-none' : ''}
+                                  ${swapSourceKey !== null && !isComplete && !isSwapSource ? 'opacity-40' : ''}
+                                `}
+                              >
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span className="text-xs text-gray-500 font-medium">Équipe {slot}</span>
+                                  {isPending ? (
+                                    <div className="h-3 w-3 border-2 border-blue-300/40 border-t-blue-500 rounded-full animate-spin" />
+                                  ) : isSwapSource ? (
+                                    <button
+                                      onClick={() => setSwapSourceKey(null)}
+                                      title="Annuler l'échange"
+                                      className="h-5 w-5 rounded-full bg-amber-400 hover:bg-amber-500 flex items-center justify-center transition-colors"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                      </svg>
+                                    </button>
+                                  ) : isSwapTarget ? (
+                                    <button
+                                      onClick={() => void handleSwap(key)}
+                                      title="Échanger ces deux équipes"
+                                      className="h-5 w-5 rounded-full bg-green-100 hover:bg-green-500 text-green-600 hover:text-white flex items-center justify-center transition-colors"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8zM12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 10-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" />
+                                      </svg>
+                                    </button>
+                                  ) : isComplete ? (
+                                    <button
+                                      onClick={() => setSwapSourceKey(key)}
+                                      title="Interchanger cette équipe"
+                                      className="h-5 w-5 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center transition-colors"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                      </svg>
+                                    </button>
+                                  ) : null}
+                                </div>
+
+                                {([1, 2] as const).map((position) => {
+                                  const playerId = position === 1 ? sp.player1Id : sp.player2Id
+                                  return (
+                                    <PlayerPosition
+                                      key={position}
+                                      position={position}
+                                      playerId={playerId}
+                                      allPlayers={allPlayers}
+                                      assignedPlayerIds={assigned}
+                                      onAssign={(pid) => void applyAssign(node.id, slot, position, pid)}
+                                      onRemove={() => handleRemove(node.id, slot, position)}
+                                      onCreateAndAssign={async (name) => handleCreateAndAssign(node.id, slot, position, name)}
+                                    />
+                                  )
+                                })}
+                              </div>
                             )
                           })}
                         </div>
-                      )
-                    })}
-                  </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              </section>
+            )}
           </div>
         )}
       </div>

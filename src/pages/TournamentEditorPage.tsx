@@ -41,6 +41,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   const [showPlayerOverlay, setShowPlayerOverlay] = useState(false)
   const [isConfiguring, setIsConfiguring] = useState(false)
   const [isActivating, setIsActivating] = useState(false)
+  const [showConcludeConfirm, setShowConcludeConfirm] = useState(false)
   const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
 
   const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
@@ -180,6 +181,13 @@ const isDirty = useTournamentStore((s) => s.isDirty)
     setIsActivating(false)
   }, [id, activateTournament])
 
+  const handleConclude = useCallback(async () => {
+    if (!id) return
+    setShowConcludeConfirm(false)
+    await supabase.from('tt_tournaments').update({ status: 'completed' }).eq('id', id)
+    setTournamentStatus('completed')
+  }, [id, setTournamentStatus])
+
   // Ctrl+S / Cmd+S
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -303,6 +311,44 @@ const isDirty = useTournamentStore((s) => s.isDirty)
               )}
               Activer le tournoi
             </button>
+          )}
+
+          {tournamentStatus === 'active' && !showConcludeConfirm && (
+            <button
+              onClick={() => setShowConcludeConfirm(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
+                transition-all duration-200
+                bg-green-600 text-white hover:bg-green-700 active:scale-[0.98]"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Conclure le tournoi
+            </button>
+          )}
+
+          {tournamentStatus === 'active' && showConcludeConfirm && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 whitespace-nowrap">Marquer comme terminé ?</span>
+              <button
+                onClick={handleConclude}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 transition-colors"
+              >
+                Confirmer
+              </button>
+              <button
+                onClick={() => setShowConcludeConfirm(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          )}
+
+          {tournamentStatus === 'completed' && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+              Tournoi terminé
+            </span>
           )}
 
           <button

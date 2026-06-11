@@ -8,47 +8,59 @@ export interface AdvancementUpdate {
   teamId: string
 }
 
+export interface TeamSplitterInput {
+  nodeId: string
+  inputSlot: number
+  teamId: string
+}
+
+export interface AdvancementResult {
+  matchUpdates: AdvancementUpdate[]
+  teamSplitterInputs: TeamSplitterInput[]
+}
+
 /**
  * Après la saisie d'un score, calcule les équipes à avancer vers les matchs suivants.
- * Retourne une liste d'updates à appliquer (matchId + champ + teamId).
+ * Retourne les mises à jour de matchs ET les inputs team_splitter à traiter en aval.
  */
 export function computeAdvancements(
   completedMatchId: string,
   allMatches: Match[],
   graph: TournamentGraph,
-): AdvancementUpdate[] {
-  const updates: AdvancementUpdate[] = []
+): AdvancementResult {
+  const matchUpdates: AdvancementUpdate[] = []
+  const teamSplitterInputs: TeamSplitterInput[] = []
 
   const completedMatch = allMatches.find((m) => m.id === completedMatchId)
-  if (!completedMatch) return updates
-  if (!completedMatch.equipe1_id || !completedMatch.equipe2_id) return updates
-  if (completedMatch.score_equipe1 == null || completedMatch.score_equipe2 == null) return updates
-  if (completedMatch.score_equipe1 === completedMatch.score_equipe2) return updates
+  if (!completedMatch) return { matchUpdates, teamSplitterInputs }
+  if (!completedMatch.equipe1_id || !completedMatch.equipe2_id) return { matchUpdates, teamSplitterInputs }
+  if (completedMatch.score_equipe1 == null || completedMatch.score_equipe2 == null) return { matchUpdates, teamSplitterInputs }
+  if (completedMatch.score_equipe1 === completedMatch.score_equipe2) return { matchUpdates, teamSplitterInputs }
 
   const phaseNodeId = completedMatch.phase_node_id
   const node = graph.nodes.find((n) => n.id === phaseNodeId)
-  if (!node) return updates
+  if (!node) return { matchUpdates, teamSplitterInputs }
 
   const config = node.data.config
   const phaseMatches = allMatches.filter((m) => m.phase_node_id === phaseNodeId)
 
-  if (config.type === 'round_robin' || config.type === 'tournante_libre' || config.type === 'americano' || config.type === 'americana_single') {
-    advanceFromRoundRobin(phaseMatches, node, allMatches, updates)
-    // Si la poule alimente un nœud best_of, déclencher son évaluation
+  // americana_single n'est plus auto-avancée — la terminaison se fait via "Terminer l'americana"
+  if (config.type === 'round_robin' || config.type === 'tournante_libre' || config.type === 'americano') {
+    advanceFromRoundRobin(phaseMatches, node, allMatches, matchUpdates, teamSplitterInputs, graph)
     for (const edge of graph.edges) {
       if (edge.source !== phaseNodeId) continue
       const targetNode = graph.nodes.find((n) => n.id === edge.target)
       if (targetNode?.data.config.type === 'best_of') {
-        advanceFromBestOf(targetNode, allMatches, graph, updates)
+        advanceFromBestOf(targetNode, allMatches, graph, matchUpdates, teamSplitterInputs)
       }
     }
   } else if (config.type === 'elimination') {
-    advanceFromElimination(completedMatch, phaseMatches, node, allMatches, updates)
+    advanceFromElimination(completedMatch, phaseMatches, node, allMatches, matchUpdates, teamSplitterInputs, graph)
   } else if (config.type === 'match_simple') {
-    advanceFromMatchSimple(completedMatch, node, allMatches, updates)
+    advanceFromMatchSimple(completedMatch, node, allMatches, matchUpdates, teamSplitterInputs, graph)
   }
 
-  return updates
+  return { matchUpdates, teamSplitterInputs }
 }
 
 // ---------------------------------------------------------------------------
@@ -59,28 +71,23 @@ function advanceFromRoundRobin(
   phaseMatches: Match[],
   node: TournamentGraph['nodes'][number],
   allMatches: Match[],
-  updates: AdvancementUpdate[],
+  matchUpdates: AdvancementUpdate[],
+  teamSplitterInputs: TeamSplitterInput[],
+  graph: TournamentGraph,
 ) {
-  // Vérifier que tous les matchs sont terminés
   const allDone = phaseMatches.every((m) => m.statut === 'termine')
   if (!allDone) return
 
   const config = node.data.config
   const standings = computeStandings(phaseMatches)
 
-  // Pour chaque output de la phase, mapper le rang au classement
   for (const output of config.outputs) {
     const standingIndex = output.rank - 1
     if (standingIndex >= standings.length) continue
 
     const teamId = standings[standingIndex].teamId
     const label = `${output.label} de ${config.name}`
-
-    // Trouver les matchs downstream qui référencent ce label
-    const targets = findMatchesByLabel(label, allMatches)
-    for (const target of targets) {
-      updates.push({ matchId: target.matchId, field: target.field, teamId })
-    }
+    resolveOutputDownstream(node.id, output.rank, teamId, label, allMatches, graph, matchUpdates, teamSplitterInputs)
   }
 }
 
@@ -92,7 +99,8 @@ function advanceFromBestOf(
   bestOfNode: TournamentGraph['nodes'][number],
   allMatches: Match[],
   graph: TournamentGraph,
-  updates: AdvancementUpdate[],
+  matchUpdates: AdvancementUpdate[],
+  teamSplitterInputs: TeamSplitterInput[],
 ) {
   const config = bestOfNode.data.config
   const incomingEdges = graph.edges.filter((e) => e.target === bestOfNode.id)
@@ -134,10 +142,7 @@ function advanceFromBestOf(
     const output = sortedOutputs[i]
     if (!output) continue
     const label = `${output.label} de ${config.name}`
-    const targets = findMatchesByLabel(label, allMatches)
-    for (const target of targets) {
-      updates.push({ matchId: target.matchId, field: target.field, teamId: candidates[i].teamId })
-    }
+    resolveOutputDownstream(bestOfNode.id, output.rank, candidates[i].teamId, label, allMatches, graph, matchUpdates, teamSplitterInputs)
   }
 }
 
@@ -150,7 +155,9 @@ function advanceFromElimination(
   phaseMatches: Match[],
   node: TournamentGraph['nodes'][number],
   allMatches: Match[],
-  updates: AdvancementUpdate[],
+  matchUpdates: AdvancementUpdate[],
+  teamSplitterInputs: TeamSplitterInput[],
+  graph: TournamentGraph,
 ) {
   const winnerId =
     completedMatch.score_equipe1! > completedMatch.score_equipe2!
@@ -165,7 +172,7 @@ function advanceFromElimination(
   const winnerLabel = `Vainqueur ${completedMatch.nom}`
   const internalTargets = findMatchesByLabel(winnerLabel, phaseMatches)
   for (const target of internalTargets) {
-    updates.push({ matchId: target.matchId, field: target.field, teamId: winnerId })
+    matchUpdates.push({ matchId: target.matchId, field: target.field, teamId: winnerId })
   }
 
   // Avancement externe : si c'est la finale, avancer vers les phases downstream
@@ -178,12 +185,8 @@ function advanceFromElimination(
     for (const output of config.outputs) {
       const teamId = output.rank === 1 ? winnerId : output.rank === 2 ? loserId : null
       if (!teamId) continue
-
       const label = `${output.label} de ${config.name}`
-      const targets = findMatchesByLabel(label, allMatches)
-      for (const target of targets) {
-        updates.push({ matchId: target.matchId, field: target.field, teamId })
-      }
+      resolveOutputDownstream(node.id, output.rank, teamId, label, allMatches, graph, matchUpdates, teamSplitterInputs)
     }
   }
 }
@@ -196,7 +199,9 @@ function advanceFromMatchSimple(
   completedMatch: Match,
   node: TournamentGraph['nodes'][number],
   allMatches: Match[],
-  updates: AdvancementUpdate[],
+  matchUpdates: AdvancementUpdate[],
+  teamSplitterInputs: TeamSplitterInput[],
+  graph: TournamentGraph,
 ) {
   const winnerId =
     completedMatch.score_equipe1! > completedMatch.score_equipe2!
@@ -211,11 +216,45 @@ function advanceFromMatchSimple(
   for (const output of config.outputs) {
     const teamId = output.rank === 1 ? winnerId : output.rank === 2 ? loserId : null
     if (!teamId) continue
-
     const label = `${output.label} de ${config.name}`
+    resolveOutputDownstream(node.id, output.rank, teamId, label, allMatches, graph, matchUpdates, teamSplitterInputs)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Routage d'output : vers team_splitter ou vers match standard
+// ---------------------------------------------------------------------------
+
+function resolveOutputDownstream(
+  sourceNodeId: string,
+  outputRank: number,
+  teamId: string,
+  label: string,
+  allMatches: Match[],
+  graph: TournamentGraph,
+  matchUpdates: AdvancementUpdate[],
+  teamSplitterInputs: TeamSplitterInput[],
+) {
+  const outEdge = graph.edges.find(
+    (e) => e.source === sourceNodeId && parseHandleIndex(e.sourceHandle) === outputRank,
+  )
+  if (!outEdge) {
+    // Pas d'edge → remplissage par label dans les matchs existants
     const targets = findMatchesByLabel(label, allMatches)
     for (const target of targets) {
-      updates.push({ matchId: target.matchId, field: target.field, teamId })
+      matchUpdates.push({ matchId: target.matchId, field: target.field, teamId })
+    }
+    return
+  }
+
+  const targetNode = graph.nodes.find((n) => n.id === outEdge.target)
+  if (targetNode?.data.config.type === 'team_splitter') {
+    const inputSlot = parseHandleIndex(outEdge.targetHandle)
+    teamSplitterInputs.push({ nodeId: targetNode.id, inputSlot, teamId })
+  } else {
+    const targets = findMatchesByLabel(label, allMatches)
+    for (const target of targets) {
+      matchUpdates.push({ matchId: target.matchId, field: target.field, teamId })
     }
   }
 }

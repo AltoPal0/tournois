@@ -22,6 +22,7 @@ export default function TournamentMatchesPage() {
   const subscribeToMatches = useMatchStore((s) => s.subscribeToMatches)
   const generateMatches = useMatchStore((s) => s.generateMatches)
   const generateAmericanaSingleBatch = useMatchStore((s) => s.generateAmericanaSingleBatch)
+  const terminateAmericanaSinglePhase = useMatchStore((s) => s.terminateAmericanaSinglePhase)
   const isGeneratingBatch = useMatchStore((s) => s.isGeneratingBatch)
   const updateAmericanaSingleRoster = useMatchStore((s) => s.updateAmericanaSingleRoster)
   const resetMatches = useMatchStore((s) => s.reset)
@@ -51,6 +52,7 @@ export default function TournamentMatchesPage() {
   const [teamsLoaded, setTeamsLoaded] = useState(false)
   const [extraPlayers, setExtraPlayers] = useState<{ id: string; prenom: string }[]>([])
   const [isRosterOpen, setIsRosterOpen] = useState(false)
+  const [isTerminating, setIsTerminating] = useState(false)
   const onboardingCheckDone = useRef(false)
 
   const { identity, setIdentity, clearIdentity, findMyTeam } = usePlayerIdentity(id ?? '')
@@ -179,16 +181,14 @@ export default function TournamentMatchesPage() {
   )
 
   const sortedPhases = useMemo(() => {
-    if (nodes.length === 0 || matches.length === 0) return []
-    const phaseIdsWithMatches = new Set(matches.map((m) => m.phase_node_id))
+    if (nodes.length === 0) return []
     return topologicalSort(graph)
-      .filter((n) => phaseIdsWithMatches.has(n.id))
       .map((n) => ({
         id: n.id,
         name: n.data.config.name,
         type: n.data.config.type as PhaseType,
       }))
-  }, [nodes, graph, matches])
+  }, [nodes, graph])
 
   useEffect(() => {
     if (sortedPhases.length > 0 && !activePhaseId) {
@@ -519,6 +519,31 @@ export default function TournamentMatchesPage() {
                   : undefined
               }
               isGeneratingBatch={activePhase.type === 'americana_single' ? isGeneratingBatch : false}
+              batchSize={
+                activePhase.type === 'americana_single'
+                  ? (nodes.find((n) => n.id === activePhase.id)?.data.config.batchSize ?? 3)
+                  : undefined
+              }
+              phaseCompleted={
+                activePhase.type === 'americana_single'
+                  ? (nodes.find((n) => n.id === activePhase.id)?.data.config.completed ?? false)
+                  : undefined
+              }
+              playerNames={
+                activePhase.type === 'americana_single'
+                  ? (nodes.find((n) => n.id === activePhase.id)?.data.config.playerNames ?? '')
+                  : undefined
+              }
+              onTerminate={
+                activePhase.type === 'americana_single'
+                  ? async () => {
+                      setIsTerminating(true)
+                      try { await terminateAmericanaSinglePhase(activePhase.id) }
+                      finally { setIsTerminating(false) }
+                    }
+                  : undefined
+              }
+              isTerminating={isTerminating}
             />
           </div>
         ) : null}

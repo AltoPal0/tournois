@@ -17,7 +17,7 @@ function generateId() {
   return crypto.randomUUID()
 }
 
-function createDefaultOutputs(type: PhaseType): PhaseOutput[] {
+function createDefaultOutputs(type: PhaseType, inputCount?: number): PhaseOutput[] {
   const configs: Record<PhaseType, { count: number; labels: string[] }> = {
     round_robin: { count: 2, labels: ['1er', '2ème'] },
     elimination: { count: 3, labels: ['1er', '2ème', '3ème'] },
@@ -27,6 +27,8 @@ function createDefaultOutputs(type: PhaseType): PhaseOutput[] {
     americano: { count: 2, labels: ['1er', '2ème'] },
     americana_single: { count: 3, labels: ['1er', '2ème', '3ème'] },
     best_of: { count: 3, labels: ['1er meilleur', '2ème meilleur', '3ème meilleur'] },
+    team_builder: { count: (inputCount ?? 4) / 2, labels: Array.from({ length: (inputCount ?? 4) / 2 }, (_, i) => `Équipe ${i + 1}`) },
+    team_splitter: { count: (inputCount ?? 2) * 2, labels: Array.from({ length: (inputCount ?? 2) * 2 }, (_, i) => `J${i + 1}`) },
   }
   const { count, labels } = configs[type]
   return Array.from({ length: count }, (_, i) => ({
@@ -46,6 +48,8 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     americano: 'Américano',
     americana_single: 'Americana Single',
     best_of: 'Meilleurs N',
+    team_builder: 'Formation d\'équipes',
+    team_splitter: 'Dissolution d\'équipes',
   }
   const inputCounts: Record<PhaseType, number> = {
     round_robin: 4,
@@ -56,15 +60,19 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     americano: 6,
     americana_single: 8,
     best_of: 3,
+    team_builder: 4,
+    team_splitter: 2,
   }
+  const count = inputCounts[type]
   return {
     name: names[type],
     type,
-    inputCount: inputCounts[type],
-    outputs: createDefaultOutputs(type),
+    inputCount: count,
+    outputs: createDefaultOutputs(type, count),
     setsCount: 1 as const,
     roundCount: type === 'tournante_libre' || type === 'americano' ? 3 : undefined,
     playerNames: type === 'americana_single' ? '' : undefined,
+    internalPairs: (type === 'team_builder' || type === 'team_splitter') ? [] : undefined,
   }
 }
 
@@ -178,6 +186,16 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
           id: `out-${i + 1}`,
           rank: i + 1,
         }))
+      }
+
+      // Pour team_builder/team_splitter, recalculer les outputs automatiquement si inputCount change
+      if (
+        updates.inputCount !== undefined &&
+        (newConfig.type === 'team_builder' || newConfig.type === 'team_splitter')
+      ) {
+        const newOutputs = createDefaultOutputs(newConfig.type, updates.inputCount)
+        newConfig.outputs = newOutputs
+        newConfig.internalPairs = []
       }
 
       const updatedNodes = state.nodes.map((n) =>

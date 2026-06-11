@@ -1,4 +1,4 @@
-export type PhaseType = 'round_robin' | 'elimination' | 'super_americana' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single' | 'best_of'
+export type PhaseType = 'round_robin' | 'elimination' | 'super_americana' | 'tournante_libre' | 'match_simple' | 'americano' | 'americana_single' | 'best_of' | 'team_builder' | 'team_splitter'
 
 export interface PhaseOutput {
   id: string
@@ -19,6 +19,10 @@ export interface PhaseConfig {
   playerNames?: string
   livePlayerManagement?: boolean
   restingPlayerIds?: string[]
+  batchSize?: number
+  completed?: boolean
+  internalPairs?: { inputSlot: number; outputSlot: number }[]
+  playerSlots?: Record<number, string>
 }
 
 export type PlayerTemplate = 'default' | 'slick-dark' | 'palm-springs' | 'green-turf'

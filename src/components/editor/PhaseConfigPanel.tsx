@@ -10,6 +10,8 @@ const phaseTypeOptions: { value: PhaseType; label: string }[] = [
   { value: 'match_simple', label: 'Match simple' },
   { value: 'americano', label: 'Américano' },
   { value: 'americana_single', label: 'Americana Single (individuel)' },
+  { value: 'team_builder', label: 'Formation d\'équipes' },
+  { value: 'team_splitter', label: 'Dissolution d\'équipes' },
 ]
 
 export default function PhaseConfigPanel() {
@@ -133,8 +135,8 @@ function PanelContent({
         </div>
       )}
 
-      {/* Nombre de sets */}
-      <div>
+      {/* Nombre de sets (pas pour team_builder/team_splitter) */}
+      {config.type !== 'team_builder' && config.type !== 'team_splitter' && <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Nombre de sets</label>
         <div className="flex rounded-lg border border-gray-200 overflow-hidden">
           {([1, 2, 3] as const).map((n) => (
@@ -153,9 +155,10 @@ function PanelContent({
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
-      {/* Planification */}
+      {/* Planification (pas pour team_builder/team_splitter) */}
+      {config.type !== 'team_builder' && config.type !== 'team_splitter' &&
       <div className="flex flex-col gap-3">
         <label className="block text-xs font-medium text-gray-500">Planification</label>
         <div>
@@ -208,10 +211,10 @@ function PanelContent({
             ))}
           </div>
         </div>
-      </div>
+      </div>}
 
-      {/* Input count */}
-      {config.type !== 'match_simple' && config.type !== 'americana_single' && (
+      {/* Input count — général */}
+      {config.type !== 'match_simple' && config.type !== 'americana_single' && config.type !== 'team_builder' && config.type !== 'team_splitter' && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">
             Nombre d'équipes (entrées)
@@ -230,6 +233,54 @@ function PanelContent({
               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
               transition-shadow duration-150"
           />
+        </div>
+      )}
+
+      {/* Input count — team_builder (multiples de 2) */}
+      {config.type === 'team_builder' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Nombre de joueurs (entrées)
+          </label>
+          <input
+            type="number"
+            min={4}
+            max={32}
+            step={2}
+            value={config.inputCount}
+            onChange={(e) => {
+              const raw = parseInt(e.target.value) || 4
+              const val = raw % 2 === 0 ? raw : raw + 1
+              updatePhaseConfig(nodeId, { inputCount: Math.max(4, Math.min(32, val)) })
+            }}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+              focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+              transition-shadow duration-150"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">{config.inputCount} joueurs → {config.inputCount / 2} équipes</p>
+        </div>
+      )}
+
+      {/* Input count — team_splitter */}
+      {config.type === 'team_splitter' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Nombre d'équipes (entrées)
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={16}
+            value={config.inputCount}
+            onChange={(e) => {
+              const val = Math.max(1, Math.min(16, parseInt(e.target.value) || 1))
+              updatePhaseConfig(nodeId, { inputCount: val })
+            }}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+              focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent
+              transition-shadow duration-150"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">{config.inputCount} équipe{config.inputCount > 1 ? 's' : ''} → {config.inputCount * 2} joueurs</p>
         </div>
       )}
 
@@ -257,6 +308,31 @@ function PanelContent({
               const count = (config.playerNames ?? '').split(',').map((s) => s.trim()).filter(Boolean).length
               return count > 0 ? `${count} joueur${count > 1 ? 's' : ''}` : 'Aucun joueur'
             })()}
+          </p>
+        </div>
+      )}
+
+      {/* Nombre de matchs par batch (americana_single) */}
+      {config.type === 'americana_single' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Matchs générés par batch
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={config.batchSize ?? 3}
+            onChange={(e) => {
+              const val = parseInt(e.target.value, 10)
+              if (!isNaN(val) && val >= 1) updatePhaseConfig(nodeId, { batchSize: val })
+            }}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+              focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent
+              transition-shadow duration-150"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            Nombre maximum de matchs générés à chaque clic (limité par le nombre de joueurs disponibles)
           </p>
         </div>
       )}
@@ -289,8 +365,8 @@ function PanelContent({
         </div>
       )}
 
-      {/* Outputs */}
-      <div>
+      {/* Outputs (pas pour team_builder/team_splitter : auto-calculés) */}
+      {config.type !== 'team_builder' && config.type !== 'team_splitter' && <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-medium text-gray-500">Sorties (classement)</label>
           <button
@@ -326,7 +402,7 @@ function PanelContent({
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Duplicate + Delete */}
       <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">

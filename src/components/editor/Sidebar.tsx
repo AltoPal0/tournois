@@ -50,6 +50,18 @@ const phaseTypes: { type: PhaseType; label: string; description: string; color: 
     description: 'Compare et route les meilleures équipes',
     color: 'border-purple-200 bg-purple-50 text-purple-700',
   },
+  {
+    type: 'team_builder',
+    label: 'Formation d\'équipes',
+    description: 'Joueurs → équipes (liaisons slot à slot)',
+    color: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+  },
+  {
+    type: 'team_splitter',
+    label: 'Dissolution d\'équipes',
+    description: 'Équipes → joueurs (liaisons slot à slot)',
+    color: 'border-cyan-200 bg-cyan-50 text-cyan-700',
+  },
 ]
 
 export default function Sidebar({ onOpenConfig }: { onOpenConfig?: () => void }) {
@@ -59,33 +71,9 @@ export default function Sidebar({ onOpenConfig }: { onOpenConfig?: () => void })
   }
 
   return (
-    <div className="w-52 border-r border-gray-200 bg-white p-4 flex flex-col gap-3 h-full">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-        Phases
-      </p>
-      {phaseTypes.map(({ type, label, description, color, disabled }) => (
-        <div
-          key={type}
-          draggable={!disabled}
-          onDragStart={disabled ? undefined : (e) => onDragStart(e, type)}
-          className={`border rounded-lg px-3 py-2.5
-            transition-transform duration-150 ${color}
-            ${disabled
-              ? 'opacity-40 cursor-not-allowed grayscale'
-              : 'cursor-grab active:cursor-grabbing hover:scale-[1.02] hover:shadow-sm'
-            }`}
-        >
-          <p className="text-sm font-medium">{label}</p>
-          <p className="text-[11px] opacity-70">{description}</p>
-        </div>
-      ))}
-
-      <div className="flex-1" />
-
-      <div className="border-t border-gray-100 pt-3">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-          Config
-        </p>
+    <div className="w-52 border-r border-gray-200 bg-white flex flex-col h-full">
+      {/* Bouton config global — épinglé en haut */}
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100 shrink-0">
         <button
           onClick={onOpenConfig}
           className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-gray-200
@@ -97,6 +85,29 @@ export default function Sidebar({ onOpenConfig }: { onOpenConfig?: () => void })
           </svg>
           Paramètres
         </button>
+      </div>
+
+      {/* Liste des phases — scrollable */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          Phases
+        </p>
+        {phaseTypes.map(({ type, label, description, color, disabled }) => (
+          <div
+            key={type}
+            draggable={!disabled}
+            onDragStart={disabled ? undefined : (e) => onDragStart(e, type)}
+            className={`border rounded-lg px-3 py-2.5
+              transition-transform duration-150 ${color}
+              ${disabled
+                ? 'opacity-40 cursor-not-allowed grayscale'
+                : 'cursor-grab active:cursor-grabbing hover:scale-[1.02] hover:shadow-sm'
+              }`}
+          >
+            <p className="text-sm font-medium">{label}</p>
+            <p className="text-[11px] opacity-70">{description}</p>
+          </div>
+        ))}
       </div>
     </div>
   )

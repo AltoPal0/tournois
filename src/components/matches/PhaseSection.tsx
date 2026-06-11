@@ -402,6 +402,11 @@ interface PhaseSectionProps {
   onToggleFilter?: () => void
   onGenerateBatch?: () => void
   isGeneratingBatch?: boolean
+  batchSize?: number
+  phaseCompleted?: boolean
+  onTerminate?: () => void
+  isTerminating?: boolean
+  playerNames?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +428,13 @@ export default function PhaseSection({
   onToggleFilter,
   onGenerateBatch,
   isGeneratingBatch = false,
+  batchSize = 3,
+  phaseCompleted = false,
+  onTerminate,
+  isTerminating = false,
+  playerNames = '',
 }: PhaseSectionProps) {
+  const [confirmTerminate, setConfirmTerminate] = useState(false)
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
 
   const standings = useMemo(
@@ -610,15 +621,35 @@ export default function PhaseSection({
         </div>
       ))}
 
-      {type === 'americana_single' &&
-        isActive &&
-        matches.length > 0 &&
-        matches.every((m) => m.statut === 'termine') &&
-        onGenerateBatch && (
-          <div className="mt-4 flex justify-center">
+      {type === 'americana_single' && matches.length === 0 && (() => {
+        const players = playerNames.split(',').map((s) => s.trim()).filter(Boolean)
+        if (players.length === 0) return (
+          <div className="py-10 text-center text-gray-400 text-sm">
+            Aucun joueur configuré pour cette phase.
+          </div>
+        )
+        return (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              {players.length} joueur{players.length > 1 ? 's' : ''} inscrits
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {players.map((name) => (
+                <span key={name} className="px-3 py-1 bg-teal-50 border border-teal-200 rounded-full text-sm font-medium text-teal-800">
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
+      {type === 'americana_single' && !phaseCompleted && (
+        <div className="mt-4 flex flex-col items-center gap-2">
+          {(matches.length === 0 || matches.every((m) => m.statut === 'termine')) && onGenerateBatch && (
             <button
               onClick={onGenerateBatch}
-              disabled={isGeneratingBatch}
+              disabled={isGeneratingBatch || isTerminating}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold
                 bg-padel-blue text-white hover:bg-padel-blue-light transition-all duration-200
                 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-padel-blue/25"
@@ -630,10 +661,49 @@ export default function PhaseSection({
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                 </svg>
               )}
-              {isGeneratingBatch ? 'Génération…' : 'Générer 3 nouveaux matchs'}
+              {isGeneratingBatch ? 'Génération…' : `Générer ${batchSize} nouveau${batchSize > 1 ? 'x' : ''} match${batchSize > 1 ? 's' : ''}`}
             </button>
-          </div>
-        )}
+          )}
+          {onTerminate && (
+            confirmTerminate ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Confirmer la clôture ?</span>
+                <button
+                  onClick={() => { setConfirmTerminate(false); onTerminate() }}
+                  disabled={isTerminating}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-700
+                    disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isTerminating ? 'Clôture…' : 'Oui, terminer'}
+                </button>
+                <button
+                  onClick={() => setConfirmTerminate(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmTerminate(true)}
+                disabled={isGeneratingBatch || isTerminating}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold
+                  bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100
+                  transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Terminer l'americana
+              </button>
+            )
+          )}
+        </div>
+      )}
+      {type === 'americana_single' && phaseCompleted && (
+        <div className="mt-4 flex justify-center">
+          <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+            Phase terminée
+          </span>
+        </div>
+      )}
 
       {scoringMatch && (
         <ScoreInput

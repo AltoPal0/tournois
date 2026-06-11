@@ -37,6 +37,9 @@ export default function TournamentListPage() {
     }
   }
 
+  const active = tournaments.filter((t) => t.status !== 'completed')
+  const past = tournaments.filter((t) => t.status === 'completed')
+
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -61,7 +64,7 @@ export default function TournamentListPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-12">
         {loading ? (
           <div className="flex justify-center py-24">
             <div className="h-6 w-6 border-2 border-gray-200 border-t-blue-600 rounded-full animate-spin" />
@@ -77,11 +80,35 @@ export default function TournamentListPage() {
             <p className="text-gray-400 text-sm mt-1">Créez votre premier tournoi pour commencer</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {tournaments.map((t) => (
-              <TournamentCard key={t.id} tournament={t} />
-            ))}
-          </div>
+          <>
+            {/* Tournois actifs */}
+            {active.length > 0 && (
+              <section>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {active.map((t) => (
+                    <TournamentCard key={t.id} tournament={t} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Tournois passés */}
+            {past.length > 0 && (
+              <section>
+                <div className="flex items-center gap-3 mb-5">
+                  <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+                    Tournois passés
+                  </h2>
+                  <div className="flex-1 h-px bg-gray-100" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {past.map((t) => (
+                    <TournamentCard key={t.id} tournament={t} />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -61,27 +61,25 @@ export function selectIdlePlayers(
   allPlayerIds: string[],
   history: AmericanaSingleHistory,
 ): string[] | null {
-  const idle = allPlayerIds.filter((id) => !history.activePlayers.has(id))
-  if (idle.length < 4) return null
+  if (allPlayerIds.length < 4) return null
 
-  idle.sort((a, b) => (history.matchCount.get(a) ?? 0) - (history.matchCount.get(b) ?? 0))
+  // Les matchs sont joués séquentiellement — pas de filtre activePlayers.
+  // Tiebreaker déterministe qui tourne à chaque batch (salt = total matchs joués)
+  // pour éviter qu'un joueur soit systématiquement défavorisé.
+  const totalMatches = [...history.matchCount.values()].reduce((a, b) => a + b, 0)
 
-  // Prendre les 4 joueurs avec le moins de matchs (en élargissant par tranches si besoin)
-  const minCount = history.matchCount.get(idle[0]) ?? 0
-  let threshold = minCount
-  let candidates = idle.filter((id) => (history.matchCount.get(id) ?? 0) <= threshold)
-  while (candidates.length < 4) {
-    threshold++
-    candidates = idle.filter((id) => (history.matchCount.get(id) ?? 0) <= threshold)
-  }
+  const sorted = [...allPlayerIds].sort((a, b) => {
+    const da = history.matchCount.get(a) ?? 0
+    const db = history.matchCount.get(b) ?? 0
+    if (da !== db) return da - db
+    let ha = totalMatches
+    let hb = totalMatches
+    for (const c of a) ha = (((ha << 5) - ha) + c.charCodeAt(0)) | 0
+    for (const c of b) hb = (((hb << 5) - hb) + c.charCodeAt(0)) | 0
+    return (ha >>> 0) - (hb >>> 0)
+  })
 
-  // Shuffle pour éviter les biais de sélection
-  for (let i = candidates.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[candidates[i], candidates[j]] = [candidates[j], candidates[i]]
-  }
-
-  return candidates.slice(0, 4)
+  return sorted.slice(0, 4)
 }
 
 function scorePartition(
