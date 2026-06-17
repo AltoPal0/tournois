@@ -356,6 +356,32 @@ function PanelContent({
         </div>
       )}
 
+      {/* Nombre de joueurs (americana_single) */}
+      {config.type === 'americana_single' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Nombre de joueurs
+          </label>
+          <input
+            type="number"
+            min={4}
+            max={64}
+            step={2}
+            value={config.inputCount}
+            onChange={(e) => {
+              const val = Math.max(4, Math.min(64, parseInt(e.target.value) || 4))
+              updatePhaseConfig(nodeId, { inputCount: val })
+            }}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+              focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent
+              transition-shadow duration-150"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            {config.inputCount} joueurs → {Math.floor(config.inputCount / 2)} équipes par round
+          </p>
+        </div>
+      )}
+
       {/* Joueurs en CSV (americana_single) */}
       {config.type === 'americana_single' && (
         <div>
