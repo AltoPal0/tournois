@@ -69,11 +69,11 @@ const teamPhases: PhaseInfo[] = [
   },
   {
     type: 'americano',
-    label: 'Américano',
-    description: 'Rotation sans doublons',
+    label: 'Américano (équipes fixes)',
+    description: 'Paires fixes, adversaires en rotation',
     color: 'border-amber-200 bg-amber-50 text-amber-700',
     rules:
-      'Format mexicain de rotation : les partenaires changent à chaque round de façon à ce que chacun joue avec et contre tout le monde. Le classement est individuel — chaque joueur accumule les points de son équipe à chaque match. Très convivial, idéal pour les groupes mixtes.',
+      'Format américano classique : les équipes (paires de 2 joueurs) sont fixes tout au long du tournoi. À chaque round, les adversaires changent selon un algorithme de rotation circulaire sans doublons. Le classement est par équipe.',
     options: [
       { label: 'Nombre de rounds', detail: 'De 2 à 8 rotations.' },
       { label: 'Nombre d\'équipes', detail: 'De 2 à 32 (nombre pair requis).' },

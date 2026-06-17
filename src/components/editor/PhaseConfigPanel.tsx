@@ -8,7 +8,7 @@ const phaseTypeOptions: { value: PhaseType; label: string }[] = [
   { value: 'super_americana', label: 'Super Americana' },
   { value: 'tournante_libre', label: 'Tournante libre (Suisse)' },
   { value: 'match_simple', label: 'Match simple' },
-  { value: 'americano', label: 'Américano' },
+  { value: 'americano', label: 'Américano (équipes fixes)' },
   { value: 'americana_single', label: 'Americana Single (individuel)' },
   { value: 'americana_weighted', label: 'Americana Pondérée (Mexicano)' },
   { value: 'team_builder', label: 'Formation d\'équipes' },

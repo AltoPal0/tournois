@@ -50,7 +50,7 @@ const typeStyles = {
     badge: 'bg-amber-100 text-amber-700',
     border: 'border-amber-200',
     selectedRing: 'ring-amber-500',
-    label: 'Américano',
+    label: 'Américano (équipes fixes)',
   },
   best_of: {
     badge: 'bg-purple-100 text-purple-700',

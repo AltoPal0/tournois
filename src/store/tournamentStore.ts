@@ -46,7 +46,7 @@ function createDefaultConfig(type: PhaseType): PhaseConfig {
     super_americana: 'Super Americana',
     tournante_libre: 'Tournante libre',
     match_simple: 'Match',
-    americano: 'Américano',
+    americano: 'Américano (équipes fixes)',
     americana_single: 'Americana Single',
     americana_weighted: 'Americana Pondérée',
     best_of: 'Meilleurs N',
