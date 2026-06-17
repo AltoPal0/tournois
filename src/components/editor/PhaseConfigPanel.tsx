@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useTournamentStore } from '../../store/tournamentStore'
 import type { PhaseType, PhaseConfig, PhaseOutput } from '../../types/tournament'
@@ -56,6 +57,13 @@ function PanelContent({
   deleteNode: (nodeId: string) => void
   onDuplicate: (nodeId: string) => void
 }) {
+  const saveTournament = useTournamentStore((s) => s.saveTournament)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function autoSave() {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => { saveTournament() }, 600)
+  }
   function addOutput() {
     const newRank = config.outputs.length + 1
     const newOutput: PhaseOutput = {
@@ -90,7 +98,7 @@ function PanelContent({
         <input
           type="text"
           value={config.name}
-          onChange={(e) => updatePhaseConfig(nodeId, { name: e.target.value })}
+          onChange={(e) => { updatePhaseConfig(nodeId, { name: e.target.value }); autoSave() }}
           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
             transition-shadow duration-150"
