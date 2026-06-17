@@ -528,11 +528,24 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       }))
     }
 
-    // Appariement suisse pour tournante_libre
+    // Appariement suisse pour tournante_libre + auto-complétion americana_single fixe
     const updatedMatch = get().matches.find((m) => m.id === matchId)
     if (updatedMatch) {
       const { nodes } = useTournamentStore.getState()
       const phaseNode = nodes.find((n) => n.id === updatedMatch.phase_node_id)
+
+      // Auto-complétion : americana_single fixedRounds → terminer quand tous les matchs sont finis
+      if (
+        phaseNode?.data.config.type === 'americana_single' &&
+        phaseNode.data.config.fixedRounds &&
+        !phaseNode.data.config.completed
+      ) {
+        const phaseMatches = get().matches.filter((m) => m.phase_node_id === phaseNode.id)
+        if (phaseMatches.length > 0 && phaseMatches.every((m) => m.statut === 'termine')) {
+          await get().terminateAmericanaSinglePhase(phaseNode.id)
+        }
+      }
+
       if (phaseNode?.data.config.type === 'tournante_libre') {
         const phaseMatches = get().matches.filter((m) => m.phase_node_id === updatedMatch.phase_node_id)
         const pairUpdates = computeNextRoundPairings(matchId, phaseMatches)
@@ -732,7 +745,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   },
 
   startAmericanaSinglePhase: async (tournamentId, phaseNodeId, playerIds, pistes) => {
-    const { nodes } = useTournamentStore.getState()
+    const { nodes, tournamentConfig } = useTournamentStore.getState()
     const node = nodes.find((n) => n.id === phaseNodeId)
     if (!node) return
 
@@ -740,6 +753,13 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const rounds = node.data.config.roundCount ?? 5
     const matchesPerRound = Math.max(1, Math.floor(playerIds.length / 4))
     const initialCount = isFixed ? rounds * matchesPerRound : (node.data.config.batchSize ?? 3)
+
+    // Calcul horaire : durée par round et heure de début
+    const dureeMin = node.data.config.dureeMatch ?? tournamentConfig?.dureeMatch ?? 0
+    const heureDebutStr = node.data.config.heureDebut ?? tournamentConfig?.heureDebut ?? null
+    const heureDebutTotalMin = heureDebutStr
+      ? (() => { const [h, m] = heureDebutStr.split(':').map(Number); return h * 60 + m })()
+      : null
 
     let currentPhaseMatches: Match[] = get().matches.filter((m) => m.phase_node_id === phaseNodeId)
 
@@ -753,6 +773,21 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       if (!teamId1 || !teamId2) break
 
       const ordre = currentPhaseMatches.length + 1
+
+      // Piste : distribution cyclique par position dans le round
+      const matchWithinRound = i % matchesPerRound
+      const piste = pistes.length > 0 ? (pistes[matchWithinRound % pistes.length] ?? null) : null
+
+      // Horaire : heure de début + (numéro de round × durée)
+      const roundIndex = Math.floor(i / matchesPerRound)
+      let horaire: string | null = null
+      if (heureDebutTotalMin !== null && dureeMin > 0) {
+        const startMin = heureDebutTotalMin + roundIndex * dureeMin
+        const hh = Math.floor(startMin / 60).toString().padStart(2, '0')
+        const mm = (startMin % 60).toString().padStart(2, '0')
+        horaire = `${hh}:${mm}`
+      }
+
       const { data: newMatch } = await supabase
         .from('tt_matches')
         .insert({
@@ -762,13 +797,13 @@ export const useMatchStore = create<MatchState>((set, get) => ({
           statut: 'a_jouer',
           equipe1_id: teamId1,
           equipe2_id: teamId2,
-          piste: pistes[i] ?? null,
+          piste,
           ordre,
-          round: null,
+          round: roundIndex + 1,
           score_equipe1: null,
           score_equipe2: null,
           finished_at: null,
-          horaire: null,
+          horaire,
           equipe1_label: null,
           equipe2_label: null,
         })
