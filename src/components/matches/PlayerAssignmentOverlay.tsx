@@ -1056,14 +1056,15 @@ export default function PlayerAssignmentOverlay({
                         )}
 
                         <div className={`rounded-xl border p-3 space-y-2 ${isWeighted ? 'border-sky-200 bg-sky-50/30' : 'border-teal-200 bg-teal-50/30'}`}>
-                          {players.map((name, idx) => {
-                            const isTop = isWeighted && !!(topPlayersMap.get(node.id)?.has(name))
+                          {Array.from({ length: Math.max(players.length + 1, node.data.config.inputCount) }, (_, idx) => {
+                            const name = players[idx] ?? null
+                            const isTop = isWeighted && !!name && !!(topPlayersMap.get(node.id)?.has(name))
                             return (
                               <div key={idx} className="flex items-center gap-1.5">
                                 {isWeighted && (
                                   <button
                                     type="button"
-                                    onClick={() => toggleTopPlayer(node.id, name)}
+                                    onClick={() => name && toggleTopPlayer(node.id, name)}
                                     title={isTop ? 'Retirer top player' : 'Marquer top player'}
                                     className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-md transition-colors duration-150
                                       ${isTop ? 'text-amber-500 bg-amber-50 border border-amber-300 hover:bg-amber-100' : 'text-gray-300 hover:text-amber-400 hover:bg-amber-50'}`}
@@ -1082,36 +1083,22 @@ export default function PlayerAssignmentOverlay({
                                       setAmericanaPlayers((prev) => {
                                         const next = new Map(prev)
                                         const list = [...(prev.get(node.id) ?? [])]
-                                        list[idx] = newName
+                                        if (idx < list.length) {
+                                          list[idx] = newName
+                                        } else {
+                                          list.push(newName)
+                                        }
                                         next.set(node.id, list)
                                         return next
                                       })
                                     }}
-                                    onRemove={() => handleAmericanaRemovePlayer(node.id, name)}
+                                    onRemove={() => name ? handleAmericanaRemovePlayer(node.id, name) : undefined}
                                     onCreateAndAssign={async (n) => { await handleAmericanaAddPlayer(node.id, n) }}
                                   />
                                 </div>
                               </div>
                             )
                           })}
-                          {/* Slot vide pour ajouter */}
-                          <SinglePlayerSlot
-                            playerName={null}
-                            allPlayers={allPlayers}
-                            assignedNames={assignedInThisPhase}
-                            onAssign={(name) => {
-                              setAmericanaPlayers((prev) => {
-                                const next = new Map(prev)
-                                const list = prev.get(node.id) ?? []
-                                if (!list.some((n) => n.toLowerCase() === name.toLowerCase())) {
-                                  next.set(node.id, [...list, name])
-                                }
-                                return next
-                              })
-                            }}
-                            onRemove={() => {}}
-                            onCreateAndAssign={async (n) => { await handleAmericanaAddPlayer(node.id, n) }}
-                          />
                         </div>
                       </div>
                     )
