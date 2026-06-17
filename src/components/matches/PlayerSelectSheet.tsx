@@ -8,6 +8,7 @@ interface PlayerSelectSheetProps {
   onClose: () => void
   currentIdentity: PlayerIdentity | null
   teamsMap: Map<string, TeamWithJoueurs>
+  extraPlayers?: { id: string; prenom: string }[]
   template?: PlayerTemplate
   fontScale?: FontScale
   onSelect: (joueur: { id: string; prenom: string }) => void
@@ -20,6 +21,7 @@ export default function PlayerSelectSheet({
   onClose,
   currentIdentity,
   teamsMap,
+  extraPlayers = [],
   template,
   fontScale = 'normal',
   onSelect,
@@ -75,8 +77,14 @@ export default function PlayerSelectSheet({
         list.push({ id: team.joueur2.id, prenom: team.joueur2.prenom })
       }
     }
+    for (const p of extraPlayers) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id)
+        list.push(p)
+      }
+    }
     return list.sort((a, b) => a.prenom.localeCompare(b.prenom, 'fr'))
-  }, [teamsMap])
+  }, [teamsMap, extraPlayers])
 
   const filtered = search.trim()
     ? players.filter(p => p.prenom.toLowerCase().includes(search.toLowerCase()))

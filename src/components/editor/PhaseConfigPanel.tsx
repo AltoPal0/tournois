@@ -378,7 +378,9 @@ function PanelContent({
           <p className="text-[11px] text-gray-400 mt-1">
             {(() => {
               const count = (config.playerNames ?? '').split(',').map((s) => s.trim()).filter(Boolean).length
-              return count > 0 ? `${count} joueur${count > 1 ? 's' : ''}` : 'Aucun joueur'
+              return count > 0
+                ? `${count} joueur${count > 1 ? 's' : ''} entrant${count > 1 ? 's' : ''} dans la phase`
+                : 'Aucun joueur'
             })()}
           </p>
         </div>
@@ -437,8 +439,8 @@ function PanelContent({
         </div>
       )}
 
-      {/* Outputs (pas pour team_builder/team_splitter/americana_weighted : auto-calculés) */}
-      {config.type !== 'team_builder' && config.type !== 'team_splitter' && config.type !== 'americana_weighted' && <div>
+      {/* Outputs (pas pour team_builder/team_splitter) */}
+      {config.type !== 'team_builder' && config.type !== 'team_splitter' && <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-medium text-gray-500">Sorties (classement)</label>
           <button

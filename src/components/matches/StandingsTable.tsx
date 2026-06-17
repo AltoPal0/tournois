@@ -92,15 +92,16 @@ function StandingsSlickDark({ standings, teamsMap, fontScale }: StandingsTablePr
   const stat = fscale(fontScale, 'text-xs', 'text-sm', 'text-base')
   const row_py = fscale(fontScale, 'py-2.5', 'py-3', 'py-3.5')
   return (
+    <div style={{ clipPath: SLICK_CLIP_TABLE, background: '#D4E800', padding: '1px' }}>
     <div style={{ clipPath: SLICK_CLIP_TABLE, background: '#0E6070' }} className="overflow-hidden">
-      <div className="px-3 py-2.5 flex items-center justify-between" style={{ background: '#062E38' }}>
+      <div className="px-3 py-2.5 flex items-center justify-between" style={{ background: '#041E24' }}>
         <div className="flex items-center gap-2">
           <div className="w-1 h-4 bg-[#D4E800] shrink-0" />
-          <span className={`${hdr} font-black text-white uppercase tracking-[0.18em]`}>Classement</span>
+          <span className={`${hdr} font-black text-[#D4E800] uppercase tracking-[0.18em]`}>Classement</span>
         </div>
         <div className="flex gap-1">
           {['V', '+/-', 'Pts'].map((h) => (
-            <span key={h} className={`${hdr} font-black text-white/30 uppercase tracking-wider w-8 text-center`}>{h}</span>
+            <span key={h} className={`${hdr} font-black text-[#D4E800]/70 uppercase tracking-wider w-8 text-center`}>{h}</span>
           ))}
         </div>
       </div>
@@ -119,20 +120,20 @@ function StandingsSlickDark({ standings, teamsMap, fontScale }: StandingsTablePr
                 style={isLeader ? { borderLeft: '3px solid #D4E800' } : { paddingLeft: '3px' }}
                 className={`px-3 ${row_py} flex items-center gap-2 border-b border-white/5`}
               >
-                <span className={`text-xs font-black w-5 shrink-0 text-center font-mono ${isLeader ? 'text-[#D4E800]' : 'text-white/25'}`}>
+                <span className={`text-xs font-black w-5 shrink-0 text-center font-mono ${isLeader ? 'text-[#D4E800]' : 'text-white/50'}`}>
                   {i + 1}
                 </span>
                 <div className="flex-1 min-w-0 truncate">
-                  <span className={`${name} font-black uppercase tracking-wide ${getTeamDisplay(row.teamId, teamsMap) ? 'text-white' : 'text-white/30'}`}>
+                  <span className={`${name} font-black uppercase tracking-wide ${getTeamDisplay(row.teamId, teamsMap) ? 'text-white' : 'text-white/40'}`}>
                     {getTeamDisplay(row.teamId, teamsMap) ?? '———'}
                   </span>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <span className={`${stat} font-mono text-white/40 w-8 text-center`}>{row.wins}</span>
-                  <span className={`${stat} font-mono w-8 text-center ${!hasPlayed ? 'text-white/20' : diff > 0 ? 'text-[#D4E800]' : diff < 0 ? 'text-red-400' : 'text-white/40'}`}>
+                  <span className={`${stat} font-mono text-white/70 w-8 text-center`}>{row.wins}</span>
+                  <span className={`${stat} font-mono w-8 text-center ${!hasPlayed ? 'text-white/40' : diff > 0 ? 'text-[#D4E800]' : diff < 0 ? 'text-red-400' : 'text-white/60'}`}>
                     {hasPlayed ? fmtDiff(diff) : '—'}
                   </span>
-                  <span className={`${fscale(fontScale,'text-sm','text-base','text-lg')} font-black font-mono w-8 text-center ${isLeader ? 'text-[#D4E800]' : hasPlayed && row.points > 0 ? 'text-white' : 'text-white/20'}`}>
+                  <span className={`${fscale(fontScale,'text-sm','text-base','text-lg')} font-black font-mono w-8 text-center ${isLeader ? 'text-[#D4E800]' : hasPlayed && row.points > 0 ? 'text-white' : 'text-white/40'}`}>
                     {hasPlayed ? row.points : '—'}
                   </span>
                 </div>
@@ -141,6 +142,7 @@ function StandingsSlickDark({ standings, teamsMap, fontScale }: StandingsTablePr
           })}
         </div>
       )}
+    </div>
     </div>
   )
 }

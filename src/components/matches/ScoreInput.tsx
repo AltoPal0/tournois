@@ -233,7 +233,7 @@ function SlickTeamPanel({ name, score, isLeading, onInc, onDec }: { name: string
           className="h-12 w-12 flex items-center justify-center text-2xl font-black select-none transition-all duration-75 active:scale-90 bg-white/10 text-white/60 hover:bg-white/20">
           −
         </button>
-        <span key={score} className={`text-6xl font-black tabular-nums select-none leading-none ${isLeading ? 'text-[#D4E800]' : 'text-white/20'}`}>
+        <span key={score} className={`text-6xl font-black tabular-nums select-none leading-none ${isLeading ? 'text-[#D4E800]' : 'text-white/50'}`}>
           {score}
         </span>
         <button onPointerDown={(e) => { e.preventDefault(); onInc() }}

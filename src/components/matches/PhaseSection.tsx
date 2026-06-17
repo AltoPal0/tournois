@@ -63,12 +63,18 @@ function fscale(scale: FontScale | undefined, normal: string, xl: string, xxl: s
   return normal
 }
 
+function labelContains(label: string | null, name: string): boolean {
+  if (!label || !name) return false
+  return label.split('/').some((n) => n.trim() === name)
+}
+
 interface CardProps {
   match: Match
   teamsMap: Map<string, TeamWithJoueurs>
   isActive: boolean
   scoreBasedSchedule?: boolean
   myTeamId?: string | null
+  myPlayerName?: string | null
   fontScale?: FontScale
   onScoreClick: (match: Match) => void
 }
@@ -77,14 +83,18 @@ interface CardProps {
 // DEFAULT — cartes blanches arrondies, score en colonne à droite
 // ---------------------------------------------------------------------------
 
-function MatchCardDefault({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
+function MatchCardDefault({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, myPlayerName, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
   const canScore = isActive && !!((match.equipe1_id && match.equipe2_id) || (match.equipe1_label && match.equipe2_label))
   const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
-  const isMyMatch = myTeamId ? match.equipe1_id === myTeamId || match.equipe2_id === myTeamId : false
+  const isMyMatch = myTeamId
+    ? match.equipe1_id === myTeamId || match.equipe2_id === myTeamId
+    : myPlayerName
+    ? labelContains(match.equipe1_label, myPlayerName) || labelContains(match.equipe2_label, myPlayerName)
+    : false
   const pisteDisplay = match.piste != null ? `Piste ${match.piste}` : null
   const horaireRaw = formatHoraire(match.horaire)
   const horaireDisplay = horaireRaw && scoreBasedSchedule && !hasScore ? `~${horaireRaw}` : horaireRaw
@@ -141,14 +151,18 @@ const SLICK_CLIP = 'polygon(10px 0%, 100% 0%, 100% calc(100% - 10px), calc(100% 
 // Clip-path intérieur (carte) : 8px pour que le contour jaune de 2px suive la coupe
 const SLICK_CLIP_INNER = 'polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px)'
 
-function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
+function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, myPlayerName, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
   const canScore = isActive && !!((match.equipe1_id && match.equipe2_id) || (match.equipe1_label && match.equipe2_label))
   const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
-  const isMyMatch = myTeamId ? match.equipe1_id === myTeamId || match.equipe2_id === myTeamId : false
+  const isMyMatch = myTeamId
+    ? match.equipe1_id === myTeamId || match.equipe2_id === myTeamId
+    : myPlayerName
+    ? labelContains(match.equipe1_label, myPlayerName) || labelContains(match.equipe2_label, myPlayerName)
+    : false
   const pisteDisplay = match.piste != null ? `Pista ${match.piste}` : null
   const horaireRaw = formatHoraire(match.horaire)
   const horaireDisplay = horaireRaw && scoreBasedSchedule && !hasScore ? `~${horaireRaw}` : horaireRaw
@@ -239,14 +253,18 @@ function MatchCardSlickDark({ match, teamsMap, isActive, scoreBasedSchedule, myT
 // Score affiché horizontalement au centre. Palette chaude terracotta + crème.
 // ---------------------------------------------------------------------------
 
-function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
+function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, myPlayerName, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
   const canScore = isActive && !!((match.equipe1_id && match.equipe2_id) || (match.equipe1_label && match.equipe2_label))
   const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
-  const isMyMatch = myTeamId ? match.equipe1_id === myTeamId || match.equipe2_id === myTeamId : false
+  const isMyMatch = myTeamId
+    ? match.equipe1_id === myTeamId || match.equipe2_id === myTeamId
+    : myPlayerName
+    ? labelContains(match.equipe1_label, myPlayerName) || labelContains(match.equipe2_label, myPlayerName)
+    : false
   const pisteDisplay = match.piste != null ? `Court ${match.piste}` : null
   const horaireRaw = formatHoraire(match.horaire)
   const horaireDisplay = horaireRaw && scoreBasedSchedule && !hasScore ? `~${horaireRaw}` : horaireRaw
@@ -314,14 +332,18 @@ function MatchCardPalmSprings({ match, teamsMap, isActive, scoreBasedSchedule, m
 // Scores en rose vif #E85D75. Texte plum #3A1F2B. Doux et lisible.
 // ---------------------------------------------------------------------------
 
-function MatchCardGreenTurf({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick }: CardProps) {
+function MatchCardGreenTurf({ match, teamsMap, isActive, scoreBasedSchedule, myTeamId, myPlayerName, fontScale, onScoreClick }: CardProps) {
   const team1Name = getTeamName(match.equipe1_id, teamsMap)
   const team2Name = getTeamName(match.equipe2_id, teamsMap)
   const canScore = isActive && !!((match.equipe1_id && match.equipe2_id) || (match.equipe1_label && match.equipe2_label))
   const hasScore = match.score_equipe1 != null && match.score_equipe2 != null
   const team1Won = hasScore && match.score_equipe1! > match.score_equipe2!
   const team2Won = hasScore && match.score_equipe2! > match.score_equipe1!
-  const isMyMatch = myTeamId ? match.equipe1_id === myTeamId || match.equipe2_id === myTeamId : false
+  const isMyMatch = myTeamId
+    ? match.equipe1_id === myTeamId || match.equipe2_id === myTeamId
+    : myPlayerName
+    ? labelContains(match.equipe1_label, myPlayerName) || labelContains(match.equipe2_label, myPlayerName)
+    : false
   const pisteDisplay = match.piste != null ? `Piste ${match.piste}` : null
   const horaireRaw = formatHoraire(match.horaire)
   const horaireDisplay = horaireRaw && scoreBasedSchedule && !hasScore ? `~${horaireRaw}` : horaireRaw
@@ -397,6 +419,7 @@ interface PhaseSectionProps {
   sameDay?: boolean
   scoreBasedSchedule?: boolean
   myTeamId?: string | null
+  myPlayerName?: string | null
   template?: PlayerTemplate
   fontScale?: FontScale
   showAllMatches?: boolean
@@ -427,6 +450,7 @@ export default function PhaseSection({
   isActive = false,
   scoreBasedSchedule,
   myTeamId,
+  myPlayerName,
   template = 'default',
   fontScale = 'normal',
   showAllMatches = true,
@@ -482,7 +506,7 @@ export default function PhaseSection({
   const scoringTeam1Name = scoringMatch ? (getTeamName(scoringMatch.equipe1_id, teamsMap) ?? scoringMatch.equipe1_label) : null
   const scoringTeam2Name = scoringMatch ? (getTeamName(scoringMatch.equipe2_id, teamsMap) ?? scoringMatch.equipe2_label) : null
 
-  const cardProps = { teamsMap, isActive, scoreBasedSchedule, myTeamId, fontScale, onScoreClick: setScoringMatch }
+  const cardProps = { teamsMap, isActive, scoreBasedSchedule, myTeamId, myPlayerName, fontScale, onScoreClick: setScoringMatch }
 
   const MatchCardComponent =
     template === 'slick-dark' ? MatchCardSlickDark :
@@ -531,6 +555,8 @@ export default function PhaseSection({
 
   const phaseHasMyMatches = myTeamId
     ? matches.some((m) => m.equipe1_id === myTeamId || m.equipe2_id === myTeamId)
+    : myPlayerName
+    ? matches.some((m) => labelContains(m.equipe1_label, myPlayerName) || labelContains(m.equipe2_label, myPlayerName))
     : false
 
   function FilterToggle() {
@@ -590,40 +616,68 @@ export default function PhaseSection({
       {(type === 'americana_single' || type === 'americana_weighted') && (() => {
         const rows = type === 'americana_single' ? individualStandings : weightedStandings
         if (rows.length === 0) return null
-        const accentColor = type === 'americana_weighted' ? 'text-sky-700' : 'text-teal-700'
+        const isSlick = template === 'slick-dark'
+        const isPalm = template === 'palm-springs'
+        const isGreen = template === 'green-turf'
+        const CLIP_TABLE = 'polygon(10px 0%, 100% 0%, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0% 100%, 0% 10px)'
         return (
           <div className="mb-4">
-            <div className="overflow-x-auto rounded-xl border border-gray-100">
+            <div style={isSlick ? { clipPath: CLIP_TABLE, background: '#D4E800', padding: '1px' } : undefined}>
+            <div
+              className="overflow-x-auto"
+              style={isSlick ? { clipPath: CLIP_TABLE, background: '#0E6070' } : undefined}
+            >
+              <div
+                className={!isSlick ? `rounded-xl border ${isPalm ? 'border-stone-100' : isGreen ? 'border-[#F7C6D0]/50' : 'border-gray-100'}` : undefined}
+                style={!isSlick ? { overflow: 'hidden' } : undefined}
+              >
               <table className={`w-full ${fscale(fontScale, 'text-xs', 'text-sm', 'text-base')}`}>
                 <thead>
-                  <tr className="bg-gray-50 text-gray-400 uppercase tracking-wider">
-                    <th className="px-3 py-2 text-left">#</th>
-                    <th className="px-3 py-2 text-left">Joueur</th>
-                    <th className="px-3 py-2 text-center">J</th>
-                    <th className="px-3 py-2 text-center">V</th>
-                    <th className="px-3 py-2 text-center">Pts</th>
-                    <th className="px-3 py-2 text-center">+/-</th>
+                  <tr
+                    className={isSlick ? 'uppercase tracking-wider' : isPalm ? 'uppercase tracking-wider' : isGreen ? 'uppercase tracking-wider' : 'bg-gray-50 text-gray-400 uppercase tracking-wider'}
+                    style={isSlick ? { background: '#041E24' } : isPalm ? { background: '#7A3B28' } : isGreen ? { background: '#B23A54' } : undefined}
+                  >
+                    <th className={`px-3 py-2 text-left ${isSlick ? 'text-[#D4E800] font-black' : isPalm ? 'text-[#E8C9A0] font-bold' : isGreen ? 'text-[#FFF1E8]/80 font-bold' : 'text-gray-400'}`}>#</th>
+                    <th className={`px-3 py-2 text-left ${isSlick ? 'text-[#D4E800] font-black' : isPalm ? 'text-[#E8C9A0] font-bold' : isGreen ? 'text-[#FFF1E8]/80 font-bold' : 'text-gray-400'}`}>Joueur</th>
+                    <th className={`px-3 py-2 text-center ${isSlick ? 'text-[#D4E800]/70 font-black' : isPalm ? 'text-[#C4906A]/60 font-bold' : isGreen ? 'text-white/70 font-bold' : 'text-gray-400'}`}>J</th>
+                    <th className={`px-3 py-2 text-center ${isSlick ? 'text-[#D4E800]/70 font-black' : isPalm ? 'text-[#C4906A]/60 font-bold' : isGreen ? 'text-white/70 font-bold' : 'text-gray-400'}`}>V</th>
+                    <th className={`px-3 py-2 text-center ${isSlick ? 'text-[#D4E800]/70 font-black' : isPalm ? 'text-[#C4906A]/60 font-bold' : isGreen ? 'text-white/70 font-bold' : 'text-gray-400'}`}>Pts</th>
+                    <th className={`px-3 py-2 text-center ${isSlick ? 'text-[#D4E800]/70 font-black' : isPalm ? 'text-[#C4906A]/60 font-bold' : isGreen ? 'text-white/70 font-bold' : 'text-gray-400'}`}>+/-</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, idx) => (
-                    <tr key={row.playerId} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                      <td className="px-3 py-2 text-gray-400 font-medium">{idx + 1}</td>
-                      <td className="px-3 py-2 font-semibold text-gray-800">
-                        {type === 'americana_single'
-                          ? (playersMap?.get(row.playerId) ?? row.playerId.slice(0, 8))
-                          : row.playerId}
-                      </td>
-                      <td className="px-3 py-2 text-center text-gray-500">{row.played}</td>
-                      <td className="px-3 py-2 text-center text-gray-500">{row.wins}</td>
-                      <td className={`px-3 py-2 text-center font-bold ${accentColor}`}>{row.points}</td>
-                      <td className="px-3 py-2 text-center text-gray-500">
-                        {row.gamesWon - row.gamesLost > 0 ? '+' : ''}{row.gamesWon - row.gamesLost}
-                      </td>
-                    </tr>
-                  ))}
+                  {rows.map((row, idx) => {
+                    const isLeader = idx === 0 && row.played > 0
+                    const diff = row.gamesWon - row.gamesLost
+                    return (
+                      <tr
+                        key={row.playerId}
+                        className={isSlick ? '' : isPalm ? '' : isGreen ? '' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
+                        style={isSlick
+                          ? { background: isLeader ? '#0A4E5C' : idx % 2 === 0 ? '#0E6070' : '#0C5568', borderLeft: isLeader ? '3px solid #D4E800' : '3px solid transparent' }
+                          : isPalm ? { background: isLeader ? '#FDF6F0' : idx % 2 === 0 ? '#FFFFFF' : '#FAF7F2' }
+                          : isGreen ? { background: isLeader ? '#FCE8EE' : idx % 2 === 0 ? '#FFF1E8' : '#FFF8F3', borderLeft: isLeader ? '4px solid #E85D75' : '4px solid transparent' }
+                          : undefined}
+                      >
+                        <td className={`px-3 py-2 font-medium ${isSlick ? (isLeader ? 'text-[#D4E800] font-black' : 'text-white/50') : isPalm ? (isLeader ? 'text-[#C84B31]' : 'text-stone-300') : isGreen ? (isLeader ? 'text-[#E85D75]' : 'text-[#D4A0B0]') : 'text-gray-400'}`}>{idx + 1}</td>
+                        <td className={`px-3 py-2 font-semibold ${isSlick ? 'text-white uppercase tracking-wide font-black' : isPalm ? (isLeader ? 'text-[#7A3B28]' : 'text-stone-700') : isGreen ? (isLeader ? 'text-[#B23A54]' : 'text-[#3A1F2B]') : 'text-gray-800'}`}>
+                          {type === 'americana_single'
+                            ? (playersMap?.get(row.playerId) ?? row.playerId.slice(0, 8))
+                            : row.playerId}
+                        </td>
+                        <td className={`px-3 py-2 text-center ${isSlick ? 'text-white/70' : isPalm ? 'text-stone-400' : isGreen ? 'text-[#B28090]' : 'text-gray-500'}`}>{row.played}</td>
+                        <td className={`px-3 py-2 text-center ${isSlick ? 'text-white/70' : isPalm ? 'text-stone-400' : isGreen ? 'text-[#B28090]' : 'text-gray-500'}`}>{row.wins}</td>
+                        <td className={`px-3 py-2 text-center font-bold ${isSlick ? (isLeader ? 'text-[#D4E800]' : row.points > 0 ? 'text-white' : 'text-white/40') : isPalm ? (isLeader ? 'text-[#C84B31]' : row.points > 0 ? 'text-stone-700' : 'text-stone-200') : isGreen ? (isLeader ? 'text-[#E85D75]' : row.points > 0 ? 'text-[#3A1F2B]' : 'text-[#D4A0B0]') : (type === 'americana_weighted' ? 'text-sky-700' : 'text-teal-700')}`}>{row.points}</td>
+                        <td className={`px-3 py-2 text-center ${isSlick ? (diff > 0 ? 'text-[#D4E800]' : diff < 0 ? 'text-red-400' : 'text-white/60') : isPalm ? (diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-400' : 'text-stone-400') : isGreen ? (diff > 0 ? 'text-[#B23A54]' : diff < 0 ? 'text-[#E85D75]' : 'text-[#B28090]') : 'text-gray-500'}`}>
+                          {diff > 0 ? '+' : ''}{diff}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
+              </div>
+            </div>
             </div>
           </div>
         )

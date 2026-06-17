@@ -12,6 +12,7 @@ import AmericanaSingleRosterOverlay from '../components/matches/AmericanaSingleR
 import { topologicalSort } from '../lib/matchGeneration'
 import { usePlayerIdentity } from '../hooks/usePlayerIdentity'
 import { usePullToRefresh, PULL_THRESHOLD } from '../hooks/usePullToRefresh'
+import { getTheme } from '../lib/templateTheme'
 
 export default function TournamentMatchesPage() {
   const { id } = useParams<{ id: string }>()
@@ -218,26 +219,38 @@ export default function TournamentMatchesPage() {
   // Identité joueur
   const myTeam = findMyTeam(Array.from(teamsMap.values()))
   const myTeamId = myTeam?.id ?? null
+  const myPlayerName = identity?.prenom ?? null
+
+  function labelMatchesPlayer(label: string | null): boolean {
+    if (!label || !myPlayerName) return false
+    return label.split('/').some((n) => n.trim() === myPlayerName)
+  }
 
   // La phase active contient-elle des matchs du joueur ?
   const phaseHasMyMatches = myTeamId
     ? activePhaseMatches.some((m) => m.equipe1_id === myTeamId || m.equipe2_id === myTeamId)
+    : myPlayerName
+    ? activePhaseMatches.some((m) => labelMatchesPlayer(m.equipe1_label) || labelMatchesPlayer(m.equipe2_label))
     : false
 
   // Filtre : seulement si la phase a des matchs du joueur ET showAllMatches est false
-  const displayMatches = myTeamId && phaseHasMyMatches && !showAllMatches
-    ? activePhaseMatches.filter((m) => m.equipe1_id === myTeamId || m.equipe2_id === myTeamId)
+  const displayMatches = phaseHasMyMatches && !showAllMatches
+    ? myTeamId
+      ? activePhaseMatches.filter((m) => m.equipe1_id === myTeamId || m.equipe2_id === myTeamId)
+      : activePhaseMatches.filter((m) => labelMatchesPlayer(m.equipe1_label) || labelMatchesPlayer(m.equipe2_label))
     : undefined
 
   // Prochain match du joueur (toutes phases)
   const nextMatch = useMemo(() => {
-    if (!myTeamId) return null
+    if (!myTeamId && !myPlayerName) return null
     return (
       matches
-        .filter(
-          (m) =>
-            m.statut === 'a_jouer' &&
-            (m.equipe1_id === myTeamId || m.equipe2_id === myTeamId),
+        .filter((m) =>
+          m.statut === 'a_jouer' && (
+            myTeamId
+              ? m.equipe1_id === myTeamId || m.equipe2_id === myTeamId
+              : labelMatchesPlayer(m.equipe1_label) || labelMatchesPlayer(m.equipe2_label)
+          )
         )
         .sort((a, b) => {
           if (a.horaire && b.horaire) return a.horaire.localeCompare(b.horaire)
@@ -247,6 +260,7 @@ export default function TournamentMatchesPage() {
   }, [myTeamId, matches])
 
   const template: PlayerTemplate = tournamentConfig.playerTemplate ?? 'default'
+  const theme = getTheme(template)
 
   const initials = identity ? identity.prenom.slice(0, 2).toUpperCase() : null
 
@@ -432,15 +446,17 @@ export default function TournamentMatchesPage() {
             style={{ paddingTop: `${Math.max(8, pullDistance * 0.8)}px` }}
           >
             <div
-              className="h-8 w-8 rounded-full bg-navy-900 flex items-center justify-center shadow-lg"
+              className="h-8 w-8 rounded-full flex items-center justify-center shadow-lg"
               style={{
+                background: theme.bg,
                 opacity: isRefreshing ? 1 : pullProgress,
                 transform: `scale(${isRefreshing ? 1 : 0.6 + pullProgress * 0.4})`,
               }}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className={`h-4 w-4 text-padel-gold ${isRefreshing ? 'animate-spin' : ''}`}
+                className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                style={{ color: theme.accent }}
                 style={isRefreshing ? {} : { transform: `rotate(${pullDistance * 4}deg)` }}
                 fill="none"
                 viewBox="0 0 24 24"
@@ -455,7 +471,7 @@ export default function TournamentMatchesPage() {
 
         {isLoading || (matches.length === 0 && !tournamentId) ? (
           <div className="flex items-center justify-center h-40">
-            <div className="h-6 w-6 border-2 border-white/10 border-t-padel-blue rounded-full animate-spin" />
+            <div className="h-6 w-6 border-2 rounded-full animate-spin" style={{ borderColor: 'rgba(255,255,255,0.1)', borderTopColor: theme.accent }} />
           </div>
         ) : matches.length === 0 ? (
           <div className="flex flex-col items-center justify-center flex-1 px-6 py-20 text-center">
@@ -533,6 +549,7 @@ export default function TournamentMatchesPage() {
               sameDay={tournamentConfig.sameDay}
               scoreBasedSchedule={tournamentConfig.matchType === 'score_based'}
               myTeamId={myTeamId}
+              myPlayerName={myPlayerName}
               template={template}
               fontScale={fontScale}
               showAllMatches={showAllMatches}
@@ -635,15 +652,17 @@ export default function TournamentMatchesPage() {
           onClick={() => setShowTerminateConfirm(false)}
         >
           <div
-            className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl"
+            className="w-full max-w-sm rounded-2xl p-6 shadow-2xl"
+            style={{ background: theme.bg }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-base font-bold text-gray-900 mb-1">Terminer l'americana ?</p>
-            <p className="text-sm text-gray-500 mb-6">Le classement sera figé et la phase marquée comme terminée.</p>
+            <p className="text-base font-bold mb-1" style={{ color: theme.textPrimary }}>Terminer l'americana ?</p>
+            <p className="text-sm mb-6" style={{ color: theme.textSecondary }}>Le classement sera figé et la phase marquée comme terminée.</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowTerminateConfirm(false)}
-                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                style={{ background: theme.itemBg, color: theme.textSecondary }}
               >
                 Annuler
               </button>
@@ -655,8 +674,9 @@ export default function TournamentMatchesPage() {
                   finally { setIsTerminating(false) }
                 }}
                 disabled={isTerminating}
-                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600
-                  disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors
+                  disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ background: theme.accent, color: theme.accentText }}
               >
                 {isTerminating ? 'Clôture…' : 'Oui, terminer'}
               </button>
@@ -724,6 +744,7 @@ export default function TournamentMatchesPage() {
         onClose={() => setIsPlayerSheetOpen(false)}
         currentIdentity={identity}
         teamsMap={teamsMap}
+        extraPlayers={extraPlayers}
         template={template}
         fontScale={fontScale}
         onSelect={setIdentity}
