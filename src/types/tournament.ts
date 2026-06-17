@@ -20,6 +20,7 @@ export interface PhaseConfig {
   topPlayers?: string
   livePlayerManagement?: boolean
   liveGeneration?: boolean
+  fixedRounds?: boolean
   restingPlayerIds?: string[]
   batchSize?: number
   completed?: boolean

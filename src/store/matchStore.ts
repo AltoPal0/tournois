@@ -736,7 +736,10 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const node = nodes.find((n) => n.id === phaseNodeId)
     if (!node) return
 
-    const initialCount = node.data.config.batchSize ?? 3
+    const isFixed = node.data.config.fixedRounds ?? false
+    const rounds = node.data.config.roundCount ?? 5
+    const matchesPerRound = Math.max(1, Math.floor(playerIds.length / 4))
+    const initialCount = isFixed ? rounds * matchesPerRound : (node.data.config.batchSize ?? 3)
 
     let currentPhaseMatches: Match[] = get().matches.filter((m) => m.phase_node_id === phaseNodeId)
 
@@ -787,6 +790,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const { nodes, tournamentConfig } = useTournamentStore.getState()
     const node = nodes.find((n) => n.id === phaseNodeId)
     if (!node || node.data.config.type !== 'americana_single') return
+    if (node.data.config.fixedRounds) return
 
     // Vérifier en mémoire que tous les matchs sont terminés
     const phaseMatchesLocal = get().matches.filter((m) => m.phase_node_id === phaseNodeId)

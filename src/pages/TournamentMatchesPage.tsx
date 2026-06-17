@@ -369,7 +369,8 @@ export default function TournamentMatchesPage() {
         <div className="flex items-center gap-1">
           {/* Bouton Terminer l'americana — dans le header pour visibilité mobile */}
           {activePhase?.type === 'americana_single' &&
-            !(nodes.find((n) => n.id === activePhase.id)?.data.config.completed) && (
+            !(nodes.find((n) => n.id === activePhase.id)?.data.config.completed) &&
+            !(nodes.find((n) => n.id === activePhase.id)?.data.config.fixedRounds) && (
             <button
               onClick={() => setShowTerminateConfirm(true)}
               disabled={isTerminating}
@@ -554,7 +555,8 @@ export default function TournamentMatchesPage() {
               showAllMatches={showAllMatches}
               onToggleFilter={() => setShowAllMatches((v) => !v)}
               onGenerateBatch={
-                activePhase.type === 'americana_single'
+                activePhase.type === 'americana_single' &&
+                !(nodes.find((n) => n.id === activePhase.id)?.data.config.fixedRounds)
                   ? () => generateAmericanaSingleBatch(activePhase.id)
                   : undefined
               }
