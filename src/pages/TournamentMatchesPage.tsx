@@ -456,8 +456,7 @@ export default function TournamentMatchesPage() {
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
-                style={{ color: theme.accent }}
-                style={isRefreshing ? {} : { transform: `rotate(${pullDistance * 4}deg)` }}
+                style={{ color: theme.accent, ...(isRefreshing ? {} : { transform: `rotate(${pullDistance * 4}deg)` }) }}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
