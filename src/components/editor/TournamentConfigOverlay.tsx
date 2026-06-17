@@ -46,6 +46,11 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   const edges = useTournamentStore((s) => s.edges)
   const assignPlayersToSlot = useMatchStore((s) => s.assignPlayersToSlot)
   const matchesLoaded = useMatchStore((s) => s.matches.length > 0)
+  const hasAmericanaNodes = nodes.some(
+    (n) =>
+      (n.data.config.type === 'americana_single' || n.data.config.type === 'americana_weighted') &&
+      !edges.some((e) => e.target === n.id),
+  )
 
   const navigate = useNavigate()
 
@@ -595,8 +600,8 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
               {onOpenPlayerAssignment && (
                 <button
                   onClick={onOpenPlayerAssignment}
-                  disabled={!matchesLoaded}
-                  title={!matchesLoaded ? 'Générez d\'abord les matchs' : undefined}
+                  disabled={!matchesLoaded && !hasAmericanaNodes}
+                  title={!matchesLoaded && !hasAmericanaNodes ? 'Générez d\'abord les matchs' : undefined}
                   className="w-full px-3 py-2.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200
                     rounded-lg hover:bg-gray-100 transition-colors duration-150 flex items-center justify-center gap-2
                     disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-50"
@@ -605,7 +610,7 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
                     <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
                   </svg>
                   Gérer les joueurs / équipes
-                  {!matchesLoaded && <span className="text-xs text-gray-400 ml-1">(matchs requis)</span>}
+                  {!matchesLoaded && !hasAmericanaNodes && <span className="text-xs text-gray-400 ml-1">(matchs requis)</span>}
                 </button>
               )}
               <button
