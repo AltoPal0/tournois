@@ -781,11 +781,11 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       // Horaire : heure de début + (numéro de round × durée)
       const roundIndex = Math.floor(i / matchesPerRound)
       let horaire: string | null = null
-      if (heureDebutTotalMin !== null && dureeMin > 0) {
+      if (heureDebutTotalMin !== null && dureeMin > 0 && tournamentConfig?.matchDate) {
         const startMin = heureDebutTotalMin + roundIndex * dureeMin
         const hh = Math.floor(startMin / 60).toString().padStart(2, '0')
         const mm = (startMin % 60).toString().padStart(2, '0')
-        horaire = `${hh}:${mm}`
+        horaire = `${tournamentConfig.matchDate}T${hh}:${mm}:00`
       }
 
       const { data: newMatch } = await supabase
