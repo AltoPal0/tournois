@@ -825,6 +825,33 @@ export default function CourtSchedulePage() {
               {d > 0 ? '+' : ''}{d}min
             </button>
           ))}
+          {selected.size === 2 && (() => {
+            const [m1, m2] = [...selected].map((id) => matches.find((m) => m.id === id)!)
+            const canSwap = m1 && m2
+            return canSwap ? (
+              <>
+                <div className="w-px h-4 bg-gray-600" />
+                <button
+                  onClick={async () => {
+                    setUpdating('bulk')
+                    await Promise.all([
+                      updateMatchPiste(m1.id, m2.piste ?? null),
+                      updateMatchHoraire(m1.id, m2.horaire ? buildHoraire(toMinutes(m2.horaire), datePart) : null),
+                      updateMatchPiste(m2.id, m1.piste ?? null),
+                      updateMatchHoraire(m2.id, m1.horaire ? buildHoraire(toMinutes(m1.horaire), datePart) : null),
+                    ])
+                    setUpdating(null)
+                    setSelected(new Set())
+                  }}
+                  disabled={updating === 'bulk'}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500
+                    disabled:opacity-40 transition-colors"
+                >
+                  ⇄ Intervertir
+                </button>
+              </>
+            ) : null
+          })()}
           <div className="w-px h-4 bg-gray-600" />
           <button
             onClick={() => setSelected(new Set())}
