@@ -485,7 +485,13 @@ export default function PhaseSection({
     [type, matches],
   )
 
-  const matchesToShow = displayMatches ?? matches
+  const matchesToShow = useMemo(() => {
+    const base = displayMatches ?? matches
+    // Matchs terminés envoyés en fin de liste, ordre préservé dans chaque groupe
+    const pending = base.filter((m) => m.statut !== 'termine')
+    const done = base.filter((m) => m.statut === 'termine')
+    return [...pending, ...done]
+  }, [displayMatches, matches])
 
   const matchesByRound = useMemo(() => {
     const groups = new Map<number, Match[]>()

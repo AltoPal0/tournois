@@ -349,7 +349,7 @@ export default function TournamentMatchesPage() {
               : template === 'green-turf'
               ? `${hdrTitle} font-bold text-[#FFF1E8]`
               : `${hdrTitle} font-bold text-white`}`}>
-            {tournamentName}
+            {activePhase?.name ?? tournamentName}
           </span>
           {isActive && (
             <span className={`shrink-0 ${hdrBadge} font-bold px-2 py-0.5
