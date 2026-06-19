@@ -567,7 +567,8 @@ export default function TournamentMatchesPage() {
                   : undefined
               }
               phaseCompleted={
-                activePhase.type === 'americana_single'
+                activePhase.type === 'americana_single' &&
+                !(nodes.find((n) => n.id === activePhase.id)?.data.config.fixedRounds)
                   ? (nodes.find((n) => n.id === activePhase.id)?.data.config.completed ?? false)
                   : undefined
               }
@@ -595,7 +596,8 @@ export default function TournamentMatchesPage() {
                 activePhase.type === 'americana_weighted' ? isGeneratingBatch : undefined
               }
               onTerminate={
-                activePhase.type === 'americana_single'
+                activePhase.type === 'americana_single' &&
+                !(nodes.find((n) => n.id === activePhase.id)?.data.config.fixedRounds)
                   ? async () => {
                       setIsTerminating(true)
                       try { await terminateAmericanaSinglePhase(activePhase.id) }
