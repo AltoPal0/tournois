@@ -487,8 +487,14 @@ export default function PhaseSection({
 
   const matchesToShow = useMemo(() => {
     const base = displayMatches ?? matches
-    // Matchs terminés envoyés en fin de liste, ordre préservé dans chaque groupe
-    const pending = base.filter((m) => m.statut !== 'termine')
+    const pending = base
+      .filter((m) => m.statut !== 'termine')
+      .sort((a, b) => {
+        if (a.horaire && b.horaire) return a.horaire.localeCompare(b.horaire)
+        if (a.horaire) return -1
+        if (b.horaire) return 1
+        return a.ordre - b.ordre
+      })
     const done = base.filter((m) => m.statut === 'termine')
     return [...pending, ...done]
   }, [displayMatches, matches])
