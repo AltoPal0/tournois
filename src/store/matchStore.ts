@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Match, TeamWithJoueurs, TournamentGraph } from '../types/tournament'
 import { supabase } from '../lib/supabase'
-import { generateAllMatches, computeInputSlotPairs } from '../lib/matchGeneration'
+import { generateAllMatches, computeInputSlotPairs, parseHandleIndex } from '../lib/matchGeneration'
 import { computeAdvancements, computeAdvancementResets } from '../lib/advancement'
 import { computeNextRoundPairings } from '../lib/swissPairing'
 import { computeNextAmericanaSingleMatch } from '../lib/americanaSinglePairing'
@@ -1112,9 +1112,27 @@ export const useMatchStore = create<MatchState>((set, get) => ({
         if (joueurIds.length < 2) continue
         const teamId = await upsertTeam(joueurIds[0], joueurIds[1])
         if (!teamId) continue
-        const builderOutput = builderConfig.outputs.find((o) => o.rank === outputSlot)
-        if (!builderOutput) continue
-        const label = `${builderOutput.label} de ${builderConfig.name}`
+
+        // Construire le label de la même façon que buildProvenanceMap pour team_builder :
+        // composite des provenances des slots d'entrée qui alimentent cet outputSlot
+        const inputSlotsForOutput = (builderConfig.internalPairs ?? [])
+          .filter((p) => p.outputSlot === outputSlot)
+          .map((p) => p.inputSlot)
+          .sort((a, b) => a - b)
+        const label = inputSlotsForOutput.length > 0
+          ? inputSlotsForOutput.map((slot) => {
+              const inEdge = graph.edges.find(
+                (e) => e.target === builderNodeId && parseHandleIndex(e.targetHandle) === slot,
+              )
+              if (!inEdge) return `#${slot}`
+              const srcNode = graph.nodes.find((n) => n.id === inEdge.source)
+              if (!srcNode) return `#${slot}`
+              const srcOutputRank = parseHandleIndex(inEdge.sourceHandle)
+              const srcOutput = srcNode.data.config.outputs.find((o) => o.rank === srcOutputRank)
+              return srcOutput ? `${srcOutput.label} de ${srcNode.data.config.name}` : `#${slot}`
+            }).join(' + ')
+          : `${builderConfig.outputs.find((o) => o.rank === outputSlot)?.label ?? outputSlot} de ${builderConfig.name}`
+
         const allMatches = get().matches
         const targets = allMatches.filter((m) => m.equipe1_label === label || m.equipe2_label === label)
         for (const t of targets) {
