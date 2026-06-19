@@ -72,6 +72,12 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   const dragging = useRef(false)
   const dragStart = useRef({ x: 0, y: 0 })
   const posStart = useRef({ x: 50, y: 50 })
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function autoSave() {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => { saveTournament() }, 600)
+  }
 
   // Synchroniser rawUrl, rawPistes et rawJoueurs à l'ouverture
   useEffect(() => {
@@ -95,6 +101,7 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
     const normalized = normalizeImageUrl(rawUrl)
     setRawUrl(normalized)
     setTournamentImageUrl(normalized || null)
+    autoSave()
   }
 
   function handlePistesBlur() {
@@ -138,6 +145,7 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
   }
 
   function handlePointerUp() {
+    if (dragging.current) autoSave()
     dragging.current = false
   }
 
@@ -528,7 +536,7 @@ export default function TournamentConfigOverlay({ isOpen, onClose, onDeleteTourn
                 return (
                   <button
                     key={value}
-                    onClick={() => update({ playerTemplate: value })}
+                    onClick={() => { update({ playerTemplate: value }); autoSave() }}
                     className={`relative rounded-xl overflow-hidden border-2 transition-all duration-150
                       ${isSelected ? 'border-blue-500 shadow-md shadow-blue-500/20' : 'border-gray-200 hover:border-gray-300'}`}
                   >

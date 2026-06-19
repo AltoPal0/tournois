@@ -132,17 +132,18 @@ export default function CourtSchedulePage() {
     slotDurMap[n.id] = dur
   })
 
-  // Construit la ligne d'équipes d'une carte
-  function getTeamLine(m: Match): string {
+  // Retourne les deux équipes séparément pour l'affichage sur deux lignes
+  function getTeamPair(m: Match): { t1: string | null; t2: string | null } {
     const t1 = m.equipe1_id ? (teamNames[m.equipe1_id] ?? '…') : m.equipe1_label ? abbrevLabel(m.equipe1_label) : null
     const t2 = m.equipe2_id ? (teamNames[m.equipe2_id] ?? '…') : m.equipe2_label ? abbrevLabel(m.equipe2_label) : null
+    return { t1, t2 }
+  }
+
+  // Version chaîne pour l'export Excel
+  function getTeamLine(m: Match): string {
+    const { t1, t2 } = getTeamPair(m)
     if (!t1 && !t2) return ''
-    if (t1 && t2) {
-      // Si les deux équipes ont des IDs (vraies équipes), on utilise "vs."
-      // Si ce sont des labels (positions), on utilise "/"
-      const sep = m.equipe1_id ? ' vs. ' : ' / '
-      return `${t1}${sep}${t2}`
-    }
+    if (t1 && t2) return `${t1} vs. ${t2}`
     return t1 ?? t2 ?? ''
   }
 
@@ -605,9 +606,9 @@ export default function CourtSchedulePage() {
                     const isDraggingThis = dragging?.matchId === match.id
                     const isUpdatingThis = updating === match.id || updating === 'bulk'
                     const isSelected = selected.has(match.id)
-                    const teamLine = getTeamLine(match)
+                    const { t1, t2 } = getTeamPair(match)
                     const phaseName = getPhaseName(match)
-                    const label = matchLabel(match.nom, match.ordre)
+
 
                     return (
                       <div
@@ -631,16 +632,17 @@ export default function CourtSchedulePage() {
                           ].join(' ')}
                           style={{ height: matchH }}
                         >
-                          <p className="text-[11px] font-semibold text-gray-700 truncate leading-snug">
-                            {phaseName} — {label}
+                          <p className="text-[10px] font-semibold text-gray-500 truncate leading-snug">
+                            {phaseName} · #{match.ordre} · {tournamentConfig.matchType === 'score_based' && match.statut === 'a_jouer' ? '~' : ''}{fmtTime(startMin)}
                           </p>
-                          {teamLine && (
-                            <p className="text-[11px] text-gray-500 truncate leading-snug mt-0.5">
-                              {teamLine}
-                            </p>
+                          {t1 && (
+                            <p className="text-[11px] text-gray-700 truncate leading-snug mt-0.5">{t1}</p>
                           )}
-                          {match.statut === 'termine' && match.score_equipe1 != null && match.score_equipe2 != null ? (
-                            <p className="text-[11px] font-bold text-emerald-700 mt-0.5">
+                          {t2 && (
+                            <p className="text-[11px] text-gray-700 truncate leading-snug">{t2}</p>
+                          )}
+                          {match.statut === 'termine' && match.score_equipe1 != null && match.score_equipe2 != null && (
+                            <p className="text-[10px] font-bold text-emerald-700 mt-0.5">
                               {match.score_equipe1} – {match.score_equipe2}
                               <span className="text-[10px] font-normal text-gray-400 ml-1.5">
                                 {(() => {
@@ -657,10 +659,6 @@ export default function CourtSchedulePage() {
                                   return `fin ~${fmtTime(finMin)}`
                                 })()}
                               </span>
-                            </p>
-                          ) : (
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                              {tournamentConfig.matchType === 'score_based' && match.statut === 'a_jouer' ? '~' : ''}{fmtTime(startMin)}
                             </p>
                           )}
                           {isUpdatingThis && (
@@ -735,8 +733,8 @@ export default function CourtSchedulePage() {
                     const isDraggingThis = dragging?.matchId === match.id
                     const isUpdatingThis = updating === match.id || updating === 'bulk'
                     const isSelected = selected.has(match.id)
-                    const teamLine = getTeamLine(match)
-                    const label = matchLabel(match.nom, match.ordre)
+                    const { t1, t2 } = getTeamPair(match)
+                    const phaseName = getPhaseName(match)
                     return (
                       <div
                         key={match.id}
@@ -751,13 +749,14 @@ export default function CourtSchedulePage() {
                           'bg-amber-50 border-amber-200 hover:border-amber-300',
                         ].join(' ')}
                       >
-                        <p className="text-[11px] font-semibold text-gray-700 truncate leading-snug">
-                          {label}
+                        <p className="text-[10px] font-semibold text-gray-500 truncate leading-snug">
+                          {phaseName} · #{match.ordre}
                         </p>
-                        {teamLine && (
-                          <p className="text-[11px] text-gray-500 truncate leading-snug mt-0.5">
-                            {teamLine}
-                          </p>
+                        {t1 && (
+                          <p className="text-[11px] text-gray-700 truncate leading-snug mt-0.5">{t1}</p>
+                        )}
+                        {t2 && (
+                          <p className="text-[11px] text-gray-700 truncate leading-snug">{t2}</p>
                         )}
                         {isUpdatingThis && (
                           <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-lg">

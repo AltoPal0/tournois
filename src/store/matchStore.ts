@@ -60,6 +60,92 @@ async function resolvePlayerIds(names: string[]): Promise<string[]> {
   return ids
 }
 
+function timeToMin(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return (h ?? 0) * 60 + (m ?? 0)
+}
+
+function minToTimeStr(n: number): string {
+  return `${String(Math.floor(n / 60) % 24).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`
+}
+
+/**
+ * Reschedule global pour les phases americana_single fixedRounds :
+ * interleave toutes les phases sur les pistes disponibles, round par round,
+ * en remplissant chaque créneau avec jusqu'à P matchs (P = nb de pistes).
+ * Retourne les matchs mis à jour (piste + horaire corrigés).
+ */
+async function reScheduleAmericanaSingleFixed(
+  matchesByPhase: Map<string, Match[]>,
+  phaseNodeConfigs: Array<{ heureDebut?: string; dureeMatch?: number }>,
+  pistes: number[],
+  matchDate: string,
+  globalDureeMatch: number,
+  globalHeureDebut?: string,
+): Promise<Match[]> {
+  if (pistes.length === 0) return [...matchesByPhase.values()].flat()
+
+  // Calculer heureDebut et duree en prenant le minimum/maximum des phases
+  // (le global peut être absent si chaque phase a sa propre config)
+  let startMin = globalHeureDebut ? timeToMin(globalHeureDebut) : null
+  let duree = globalDureeMatch
+  for (const cfg of phaseNodeConfigs) {
+    if (cfg.heureDebut) {
+      const m = timeToMin(cfg.heureDebut)
+      startMin = startMin === null ? m : Math.min(startMin, m)
+    }
+    if (cfg.dureeMatch) duree = Math.max(duree, cfg.dureeMatch)
+  }
+
+  if (duree === 0 || startMin === null) return [...matchesByPhase.values()].flat()
+
+  // Regrouper par phase → round
+  // Scheduler round-by-round synchronisé :
+  // toutes les phases font leur round 1 ensemble, puis round 2, puis round 3, etc.
+  // Ainsi les groupes avancent à la même vitesse et les pistes sont partagées équitablement.
+  const allMatches = [...matchesByPhase.values()].flat()
+  const maxRound = allMatches.reduce((max, m) => Math.max(max, m.round ?? 1), 0)
+
+  // Tri au sein de chaque round : phases avec le plus de matchs totaux en premier
+  const phaseTotals = new Map<string, number>()
+  for (const [id, matches] of matchesByPhase) phaseTotals.set(id, matches.length)
+
+  const batches: Match[][] = []
+  for (let round = 1; round <= maxRound; round++) {
+    const roundMatches = allMatches
+      .filter((m) => (m.round ?? 1) === round)
+      .sort((a, b) => {
+        const pa = phaseTotals.get(a.phase_node_id) ?? 0
+        const pb = phaseTotals.get(b.phase_node_id) ?? 0
+        return pa !== pb ? pb - pa : a.ordre - b.ordre
+      })
+    // Empaqueter par tranches de P pistes
+    for (let i = 0; i < roundMatches.length; i += pistes.length) {
+      batches.push(roundMatches.slice(i, i + pistes.length))
+    }
+  }
+
+  // Construire la map des mises à jour
+  const updatesMap = new Map<string, { piste: number; horaire: string }>()
+  for (let idx = 0; idx < batches.length; idx++) {
+    const horaire = `${matchDate}T${minToTimeStr(startMin + idx * duree)}:00`
+    batches[idx].forEach((m, i) => updatesMap.set(m.id, { piste: pistes[i]!, horaire }))
+  }
+
+  // Appliquer en DB
+  await Promise.all(
+    [...updatesMap.entries()].map(([id, { piste, horaire }]) =>
+      supabase.from('tt_matches').update({ piste, horaire }).eq('id', id),
+    ),
+  )
+
+  // Retourner les matchs avec les valeurs corrigées
+  return [...matchesByPhase.values()].flat().map((m) => {
+    const upd = updatesMap.get(m.id)
+    return upd ? { ...m, piste: upd.piste, horaire: upd.horaire } : m
+  })
+}
+
 async function upsertSoloTeam(playerId: string): Promise<string | null> {
   const { data: existing } = await supabase
     .from('tt_teams')
@@ -172,6 +258,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
   generateMatches: async (tournamentId, graph) => {
     set({ isGenerating: true })
+    try {
 
     // Phases americana_single : leurs matchs sont gérés séparément, on les préserve
     const americanaSingleIds = new Set(
@@ -180,11 +267,13 @@ export const useMatchStore = create<MatchState>((set, get) => ({
         .map((n) => n.id),
     )
 
-    // Sauvegarder les assignations d'équipes existantes (phase_node_id:ordre → équipes)
+    // Charger les matchs existants (statut inclus pour détecter les phases en cours)
     const { data: existingMatches } = await supabase
       .from('tt_matches')
-      .select('phase_node_id, ordre, equipe1_id, equipe2_id')
+      .select('phase_node_id, ordre, equipe1_id, equipe2_id, statut')
       .eq('tournament_id', tournamentId)
+
+    // Sauvegarder les assignations d'équipes des phases non-americana_single
     const assignationMap = new Map<string, { equipe1_id: string | null; equipe2_id: string | null }>()
     for (const m of existingMatches ?? []) {
       if (!americanaSingleIds.has(m.phase_node_id as string)) {
@@ -195,16 +284,24 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       }
     }
 
-    // Supprimer uniquement les matchs des phases non-americana_single
-    const nonAmericanaIds = graph.nodes
-      .filter((n) => !americanaSingleIds.has(n.id))
+    // Americana_single avec au moins un match terminé → préservées intégralement
+    // Americana_single sans match terminé → supprimées et régénérées (nouvelle liste de joueurs)
+    const americanaIdsToPreserve = new Set(
+      (existingMatches ?? [])
+        .filter((m) => americanaSingleIds.has(m.phase_node_id as string) && (m.statut as string) === 'termine')
+        .map((m) => m.phase_node_id as string),
+    )
+
+    // Supprimer les matchs : phases non-americana + americana sans matchs terminés
+    const idsToDelete = graph.nodes
+      .filter((n) => !americanaIdsToPreserve.has(n.id))
       .map((n) => n.id)
-    if (nonAmericanaIds.length > 0) {
+    if (idsToDelete.length > 0) {
       await supabase
         .from('tt_matches')
         .delete()
         .eq('tournament_id', tournamentId)
-        .in('phase_node_id', nonAmericanaIds)
+        .in('phase_node_id', idsToDelete)
     }
 
     // Générer les nouveaux matchs (americana_single déjà skippée dans generateAllMatches)
@@ -230,18 +327,13 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       set({ matches: inserted ?? [] })
     }
 
-    // Démarrer le premier batch pour les americana_single sans matchs
+    // Démarrer le premier batch pour les americana_single régénérées
     if (americanaSingleIds.size > 0) {
-      const existingAmericanaPhaseIds = new Set(
-        (existingMatches ?? [])
-          .filter((m) => americanaSingleIds.has(m.phase_node_id as string))
-          .map((m) => m.phase_node_id as string),
-      )
       const { tournamentConfig: tc } = useTournamentStore.getState()
       const pistes = tc?.pistes ?? []
 
       for (const nodeId of americanaSingleIds) {
-        if (existingAmericanaPhaseIds.has(nodeId)) continue
+        if (americanaIdsToPreserve.has(nodeId)) continue
         const node = graph.nodes.find((n) => n.id === nodeId)
         if (!node) continue
         const names = (node.data.config.playerNames ?? '')
@@ -262,15 +354,50 @@ export const useMatchStore = create<MatchState>((set, get) => ({
         .eq('tournament_id', tournamentId)
         .in('phase_node_id', [...americanaSingleIds])
 
+      // Reschedule global pour les phases fixedRounds régénérées (interleave pistes entre phases)
+      let finalAmericanaMatches = (americanaMatches ?? []) as Match[]
+      const fixedRegeneratedNodes = graph.nodes.filter(
+        (n) =>
+          n.data.config.type === 'americana_single' &&
+          n.data.config.fixedRounds &&
+          !americanaIdsToPreserve.has(n.id),
+      )
+      if (fixedRegeneratedNodes.length > 0 && tc?.matchDate && pistes.length > 0) {
+        const matchesByPhase = new Map<string, Match[]>()
+        for (const node of fixedRegeneratedNodes) {
+          const pm = finalAmericanaMatches.filter((m) => m.phase_node_id === node.id)
+          if (pm.length > 0) matchesByPhase.set(node.id, pm)
+        }
+        if (matchesByPhase.size > 0) {
+          const phaseConfigs = fixedRegeneratedNodes.map((n) => ({
+            heureDebut: n.data.config.heureDebut as string | undefined,
+            dureeMatch: n.data.config.dureeMatch as number | undefined,
+          }))
+          const rescheduled = await reScheduleAmericanaSingleFixed(
+            matchesByPhase,
+            phaseConfigs,
+            pistes,
+            tc.matchDate,
+            tc.dureeMatch ?? 0,
+            tc.heureDebut ?? undefined,
+          )
+          // Remplacer dans finalAmericanaMatches les matchs reschedule
+          const rescheduledMap = new Map(rescheduled.map((m) => [m.id, m]))
+          finalAmericanaMatches = finalAmericanaMatches.map((m) => rescheduledMap.get(m.id) ?? m)
+        }
+      }
+
       set((state) => ({
         matches: [
           ...state.matches.filter((m) => !americanaSingleIds.has(m.phase_node_id)),
-          ...(americanaMatches ?? []),
+          ...finalAmericanaMatches,
         ],
       }))
     }
 
-    set({ isGenerating: false })
+    } finally {
+      set({ isGenerating: false })
+    }
   },
 
   assignRandomTeams: async (tournamentId, graph) => {
@@ -922,14 +1049,14 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       })),
     }
 
+    // Collecter les inputs pour les team_builder downstream (builderNodeId → inputSlot → joueurId)
+    const teamBuilderInputs = new Map<string, Map<number, string>>()
+
     // Pour chaque output de la phase, avancer le joueur correspondant vers les phases aval
     for (const output of node.data.config.outputs) {
       const row = standings[output.rank - 1]
       if (!row) continue
-      const soloTeamId = await upsertSoloTeam(row.playerId)
-      if (!soloTeamId) continue
 
-      // Trouver l'edge sortant correspondant à cet output
       const outEdge = graph.edges.find(
         (e) => e.source === phaseNodeId && e.sourceHandle === `out-${output.rank}`,
       )
@@ -938,10 +1065,16 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       const targetNode = graph.nodes.find((n) => n.id === outEdge.target)
       if (!targetNode) continue
 
-      const label = `${output.label} de ${node.data.config.name}`
-      const allMatches = get().matches
-
-      if (targetNode.data.config.type !== 'team_splitter') {
+      if (targetNode.data.config.type === 'team_builder') {
+        // Stocker le joueur pour ce slot d'entrée du team_builder
+        const inputSlot = parseInt(outEdge.targetHandle.replace('in-', ''))
+        if (!teamBuilderInputs.has(targetNode.id)) teamBuilderInputs.set(targetNode.id, new Map())
+        teamBuilderInputs.get(targetNode.id)!.set(inputSlot, row.playerId)
+      } else if (targetNode.data.config.type !== 'team_splitter') {
+        const soloTeamId = await upsertSoloTeam(row.playerId)
+        if (!soloTeamId) continue
+        const label = `${output.label} de ${node.data.config.name}`
+        const allMatches = get().matches
         const targets = allMatches.filter(
           (m) => m.equipe1_label === label || m.equipe2_label === label,
         )
@@ -958,6 +1091,44 @@ export const useMatchStore = create<MatchState>((set, get) => ({
         }))
       }
       // team_splitter downstream sera géré dans une future itération
+    }
+
+    // Construire les équipes et propager pour chaque team_builder downstream
+    for (const [builderNodeId, slotMap] of teamBuilderInputs) {
+      const builderNode = graph.nodes.find((n) => n.id === builderNodeId)
+      if (!builderNode) continue
+      const builderConfig = builderNode.data.config
+
+      // Grouper les joueurs par outputSlot via internalPairs
+      const outputSlotPlayers = new Map<number, string[]>()
+      for (const pair of (builderConfig.internalPairs ?? [])) {
+        const joueurId = slotMap.get(pair.inputSlot)
+        if (!joueurId) continue
+        if (!outputSlotPlayers.has(pair.outputSlot)) outputSlotPlayers.set(pair.outputSlot, [])
+        outputSlotPlayers.get(pair.outputSlot)!.push(joueurId)
+      }
+
+      for (const [outputSlot, joueurIds] of outputSlotPlayers) {
+        if (joueurIds.length < 2) continue
+        const teamId = await upsertTeam(joueurIds[0], joueurIds[1])
+        if (!teamId) continue
+        const builderOutput = builderConfig.outputs.find((o) => o.rank === outputSlot)
+        if (!builderOutput) continue
+        const label = `${builderOutput.label} de ${builderConfig.name}`
+        const allMatches = get().matches
+        const targets = allMatches.filter((m) => m.equipe1_label === label || m.equipe2_label === label)
+        for (const t of targets) {
+          const field = t.equipe1_label === label ? 'equipe1_id' : 'equipe2_id'
+          await supabase.from('tt_matches').update({ [field]: teamId }).eq('id', t.id)
+        }
+        set((state) => ({
+          matches: state.matches.map((m) => {
+            if (m.equipe1_label === label) return { ...m, equipe1_id: teamId }
+            if (m.equipe2_label === label) return { ...m, equipe2_id: teamId }
+            return m
+          }),
+        }))
+      }
     }
 
     // Marquer la phase comme terminée

@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useMemo } from 'react'
+import { useEffect, useCallback, useState, useMemo, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router'
 import { ReactFlowProvider } from '@xyflow/react'
 import { useTournamentStore } from '../store/tournamentStore'
@@ -10,6 +10,7 @@ import Sidebar from '../components/editor/Sidebar'
 import PhaseConfigPanel from '../components/editor/PhaseConfigPanel'
 import TournamentConfigOverlay from '../components/editor/TournamentConfigOverlay'
 import PlayerAssignmentOverlay from '../components/matches/PlayerAssignmentOverlay'
+import TournamentTestPanel from '../components/editor/TournamentTestPanel'
 
 export default function TournamentEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -36,13 +37,22 @@ const isDirty = useTournamentStore((s) => s.isDirty)
   const matches = useMatchStore((s) => s.matches)
   const loadMatches = useMatchStore((s) => s.loadMatches)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
   const [showConfigOverlay, setShowConfigOverlay] = useState(false)
   const [showActiveConfirm, setShowActiveConfirm] = useState(false)
   const [showPlayerOverlay, setShowPlayerOverlay] = useState(false)
   const [isConfiguring, setIsConfiguring] = useState(false)
   const [isActivating, setIsActivating] = useState(false)
   const [showConcludeConfirm, setShowConcludeConfirm] = useState(false)
+  const [showTestPanel, setShowTestPanel] = useState(false)
   const [teamsMap, setTeamsMap] = useState<Map<string, TeamWithJoueurs>>(new Map())
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function autoSave() {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => { saveTournament() }, 600)
+  }
 
   const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
 
@@ -154,6 +164,14 @@ const isDirty = useTournamentStore((s) => s.isDirty)
     navigate('/')
   }, [id, clearMatches, navigate])
 
+  const handleClearMatches = useCallback(async () => {
+    if (!id) return
+    setIsClearing(true)
+    await clearMatches(id)
+    setIsClearing(false)
+    setShowClearConfirm(false)
+  }, [id, clearMatches])
+
   const handleGenerate = useCallback(async () => {
     if (!id) return
     const graph = {
@@ -221,7 +239,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
             <input
               type="text"
               value={tournamentName}
-              onChange={(e) => setTournamentName(e.target.value)}
+              onChange={(e) => { setTournamentName(e.target.value); autoSave() }}
               placeholder="Nom du tournoi"
               className="text-center text-sm font-medium text-gray-900 bg-transparent border-none
                 focus:outline-none focus:bg-gray-100 rounded-lg px-3 py-1.5
@@ -236,7 +254,7 @@ const isDirty = useTournamentStore((s) => s.isDirty)
               <input
                 type="text"
                 value={tournamentLieu ?? ''}
-                onChange={(e) => setTournamentLieu(e.target.value || null)}
+                onChange={(e) => { setTournamentLieu(e.target.value || null); autoSave() }}
                 placeholder="Lieu"
                 className="text-sm text-gray-700 bg-transparent border-none focus:outline-none
                   focus:bg-gray-100 rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors duration-150 w-36"
@@ -259,6 +277,20 @@ const isDirty = useTournamentStore((s) => s.isDirty)
               </svg>
               Matchs
             </a>
+          )}
+
+          {nodes.length > 0 && (
+            <button
+              onClick={() => setShowTestPanel(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
+                transition-all duration-200
+                bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-[0.98]"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Tester
+            </button>
           )}
 
           {canViewSchedule && (
@@ -349,6 +381,26 @@ const isDirty = useTournamentStore((s) => s.isDirty)
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
               Tournoi terminé
             </span>
+          )}
+
+          {matches.length > 0 && (
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              disabled={isClearing || isGenerating}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
+                transition-all duration-200
+                disabled:opacity-40 disabled:cursor-not-allowed
+                bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 active:scale-[0.98]"
+            >
+              {isClearing ? (
+                <div className="h-3.5 w-3.5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              )}
+              Effacer les matchs
+            </button>
           )}
 
           <button
@@ -446,6 +498,48 @@ const isDirty = useTournamentStore((s) => s.isDirty)
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal effacer les matchs */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm mx-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-2">Effacer tous les matchs ?</h3>
+            <p className="text-sm text-gray-600 mb-5">
+              Tous les matchs du tournoi seront supprimés définitivement. Vous pourrez ensuite regénérer avec la nouvelle liste de joueurs.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg
+                  hover:bg-gray-200 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleClearMatches}
+                disabled={isClearing}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg
+                  hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {isClearing ? 'Suppression...' : 'Effacer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Panneau de test */}
+      {showTestPanel && (
+        <TournamentTestPanel
+          tournamentId={id ?? ''}
+          tournamentName={tournamentName}
+          graph={graph}
+          matches={matches}
+          teamsMap={teamsMap}
+          tournamentConfig={tournamentConfig}
+          onClose={() => setShowTestPanel(false)}
+        />
       )}
 
       {/* Modal de confirmation */}
