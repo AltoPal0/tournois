@@ -321,7 +321,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   graph: 'Graphe',
 }
 
-function groupBy<T extends Record<string, unknown>>(arr: T[], key: keyof T): [string, T[]][] {
+function groupBy<T>(arr: T[], key: keyof T): [string, T[]][] {
   const map = new Map<string, T[]>()
   for (const item of arr) {
     const k = String(item[key])

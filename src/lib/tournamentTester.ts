@@ -204,7 +204,7 @@ export function verifyAdvancements(
     const targets = allMatches.filter((m) => m.equipe1_label === label || m.equipe2_label === label)
     for (const t of targets) {
       const field = t.equipe1_label === label ? 'equipe1_id' : 'equipe2_id'
-      if (!(t as Record<string, unknown>)[field]) {
+      if (!(t as unknown as Record<string, unknown>)[field]) {
         return { ok: false, error: `Slot "${label}" non rempli dans "${t.nom}"` }
       }
     }
