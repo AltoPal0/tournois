@@ -16,22 +16,6 @@ const CLIP = 'polygon(10px 0%, 100% 0%, 100% calc(100% - 10px), calc(100% - 10px
 const CLIP_BTN = 'polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)'
 const CLIP_SMALL = 'polygon(5px 0%, 100% 0%, calc(100% - 5px) 100%, 0% 100%)'
 
-type Platform = 'ios' | 'android' | 'unknown'
-
-function detectPlatform(): Platform {
-  const ua = navigator.userAgent
-  if (/iPhone|iPad|iPod/.test(ua)) return 'ios'
-  if (/Android/.test(ua)) return 'android'
-  return 'unknown'
-}
-
-function isStandalone(): boolean {
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    Boolean((window.navigator as { standalone?: boolean }).standalone)
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Slide 0 — Couverture
 // ---------------------------------------------------------------------------
@@ -77,7 +61,7 @@ function SlideWelcome({ tournamentName, theme, onNext, onSkip }: {
             {tournamentName}
           </p>
           <p className="text-white/50 text-sm mt-3 leading-relaxed">
-            Suis tes matchs, consulte le classement et installe l'app sur ton téléphone.
+            Suis tes matchs et consulte le classement en temps réel.
           </p>
         </div>
 
@@ -142,7 +126,6 @@ function SlidePlayerSelect({ teamsMap, teamsLoaded, extraPlayers, theme, onSelec
         }
       }
     }
-    // Compléter avec les joueurs americana_single non encore dans teamsMap
     for (const p of (extraPlayers ?? [])) {
       if (!seen.has(p.id)) {
         seen.add(p.id)
@@ -162,10 +145,6 @@ function SlidePlayerSelect({ teamsMap, teamsLoaded, extraPlayers, theme, onSelec
     <div className="flex flex-col h-full px-5 pt-8 pb-8">
       {/* En-tête */}
       <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-1 h-5" style={{ background: theme.accent }} />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: theme.textMuted }}>Étape 1 sur 2</span>
-        </div>
         <h2 className="text-2xl font-black text-white uppercase tracking-tight">Qui es-tu ?</h2>
         <p className="text-white/50 text-sm mt-1">Choisis ton nom pour suivre tes matchs en temps réel.</p>
       </div>
@@ -265,7 +244,7 @@ function SlidePlayerSelect({ teamsMap, teamsLoaded, extraPlayers, theme, onSelec
           }}
           className="w-full py-4 font-black uppercase tracking-widest text-sm transition-all active:brightness-90 cursor-default"
         >
-          {selectedJoueur ? `Continuer en tant que ${selectedJoueur.prenom} →` : 'Sélectionne ton nom'}
+          {selectedJoueur ? `C'est parti en tant que ${selectedJoueur.prenom} →` : 'Sélectionne ton nom'}
         </button>
         <button
           onClick={onSkip}
@@ -279,226 +258,11 @@ function SlidePlayerSelect({ teamsMap, teamsLoaded, extraPlayers, theme, onSelec
 }
 
 // ---------------------------------------------------------------------------
-// Slide 2 — Guide "Ajouter à l'écran d'accueil"
-// ---------------------------------------------------------------------------
-
-type StepDef = { icon: React.ReactNode; title: string; desc: string }
-
-function detectBrowser(): 'safari' | 'chrome' | 'other' {
-  const ua = navigator.userAgent
-  if (/CriOS/.test(ua)) return 'chrome'      // Chrome sur iOS
-  if (/FxiOS|OPiOS|EdgiOS/.test(ua)) return 'other'
-  if (/Chrome/.test(ua) && !/Edg\//.test(ua)) return 'chrome'
-  if (/Safari/.test(ua) && !/Chrome/.test(ua)) return 'safari'
-  return 'other'
-}
-
-const STEP_OPEN_SAFARI: StepDef = {
-  icon: (
-    <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253" />
-    </svg>
-  ),
-  title: 'Ouvre ce lien dans Safari',
-  desc: 'Copie l\'adresse et colle-la dans Safari — seul Safari permet d\'installer l\'app sur iPhone.',
-}
-
-const STEP_OPEN_CHROME: StepDef = {
-  icon: (
-    <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253" />
-    </svg>
-  ),
-  title: 'Ouvre ce lien dans Chrome',
-  desc: 'Copie l\'adresse et colle-la dans Chrome — c\'est nécessaire pour pouvoir installer l\'app.',
-}
-
-const IOS_STEPS_CORE: StepDef[] = [
-  {
-    icon: (
-      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-      </svg>
-    ),
-    title: 'Appuie sur Partager',
-    desc: 'L\'icône carrée avec une flèche vers le haut, en bas de l\'écran Safari.',
-  },
-  {
-    icon: (
-      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-      </svg>
-    ),
-    title: 'Sur l\'écran d\'accueil',
-    desc: 'Défile dans le menu Partager et appuie sur « Sur l\'écran d\'accueil ».',
-  },
-  {
-    icon: (
-      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    title: 'Appuie sur Ajouter',
-    desc: 'En haut à droite de la fenêtre de confirmation.',
-  },
-]
-
-const ANDROID_STEPS_CORE: StepDef[] = [
-  {
-    icon: (
-      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
-      </svg>
-    ),
-    title: 'Ouvre le menu',
-    desc: 'Appuie sur les trois points ⋮ en haut à droite de Chrome.',
-  },
-  {
-    icon: (
-      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-      </svg>
-    ),
-    title: 'Ajouter à l\'écran d\'accueil',
-    desc: 'Sélectionne cette option dans le menu déroulant.',
-  },
-  {
-    icon: (
-      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    title: 'Confirme',
-    desc: 'Appuie sur « Ajouter » dans la boîte de dialogue.',
-  },
-]
-
-function buildSteps(platform: Platform): StepDef[] {
-  const browser = detectBrowser()
-  if (platform === 'ios') {
-    const needsSafari = browser !== 'safari'
-    return needsSafari ? [STEP_OPEN_SAFARI, ...IOS_STEPS_CORE] : IOS_STEPS_CORE
-  }
-  if (platform === 'android') {
-    const needsChrome = browser !== 'chrome'
-    return needsChrome ? [STEP_OPEN_CHROME, ...ANDROID_STEPS_CORE] : ANDROID_STEPS_CORE
-  }
-  return []
-}
-
-function SlideHomescreen({ theme, onDone }: { theme: TemplateTheme; onDone: () => void }) {
-  const [platform, setPlatform] = useState<Platform>(() => detectPlatform())
-  const already = isStandalone()
-
-  const steps = useMemo(() => buildSteps(platform), [platform])
-
-  if (already) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full px-6 text-center">
-        <div
-          className="w-16 h-16 flex items-center justify-center mb-6"
-          style={{ background: theme.accent, clipPath: theme.useClip ? CLIP : undefined, borderRadius: theme.useClip ? undefined : '50%' }}
-        >
-          <svg className="h-8 w-8" style={{ color: theme.accentText }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Déjà installée !</h2>
-        <p className="text-white/50 text-sm mb-10">L'application est déjà sur ton écran d'accueil. Tu es prêt.</p>
-        <button
-          onClick={onDone}
-          style={{ clipPath: theme.useClip ? CLIP_BTN : undefined, borderRadius: theme.useClip ? undefined : '12px', background: theme.accent, color: theme.accentText }}
-          className="w-full py-4 font-black uppercase tracking-widest text-sm"
-        >
-          C'est parti →
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col h-full px-5 pt-8 pb-8">
-      {/* En-tête */}
-      <div className="mb-5 shrink-0">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-1 h-5" style={{ background: theme.accent }} />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: theme.textMuted }}>Étape 2 sur 2</span>
-        </div>
-        <h2 className="text-2xl font-black text-white uppercase tracking-tight">Installer l'app</h2>
-        <p className="text-white/50 text-sm mt-1">Accès rapide depuis ton écran d'accueil, sans navigateur.</p>
-      </div>
-
-      {/* Switch plateforme */}
-      <div className="flex gap-2 mb-5 shrink-0">
-        {(['ios', 'android'] as const).map(p => (
-          <button
-            key={p}
-            onClick={() => setPlatform(p)}
-            style={{
-              clipPath: theme.useClip ? CLIP_BTN : undefined,
-              borderRadius: theme.useClip ? undefined : '8px',
-              background: platform === p ? theme.accent : 'rgba(255,255,255,0.08)',
-              color: platform === p ? theme.accentText : 'rgba(255,255,255,0.3)',
-            }}
-            className="flex-1 py-2 text-[11px] font-black uppercase tracking-wider transition-all"
-          >
-            {p === 'ios' ? 'iPhone' : 'Android'}
-          </button>
-        ))}
-      </div>
-
-      {/* Toutes les étapes d'un coup */}
-      {steps.length > 0 && (
-        <div className="flex-1 overflow-y-auto space-y-2 min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {steps.map((step, i) => (
-            <div
-              key={i}
-              className="flex items-start gap-4 px-4 py-4"
-              style={{ background: 'rgba(255,255,255,0.06)', borderRadius: theme.useClip ? undefined : '12px', clipPath: theme.useClip ? CLIP : undefined }}
-            >
-              <div
-                className="w-7 h-7 flex items-center justify-center shrink-0 mt-0.5"
-                style={{ background: theme.accent, clipPath: theme.useClip ? 'polygon(5px 0%, 100% 0%, calc(100% - 5px) 100%, 0% 100%)' : undefined, borderRadius: theme.useClip ? undefined : '6px' }}
-              >
-                <span className="text-xs font-black" style={{ color: theme.accentText }}>{i + 1}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-black text-white uppercase tracking-tight leading-tight">{step.title}</p>
-                <p className="text-xs mt-0.5 leading-relaxed" style={{ color: theme.textSecondary }}>{step.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex flex-col gap-3 mt-4 shrink-0">
-        <button
-          onClick={onDone}
-          style={{ clipPath: theme.useClip ? CLIP_BTN : undefined, borderRadius: theme.useClip ? undefined : '12px', background: theme.accent, color: theme.accentText }}
-          className="w-full py-4 font-black uppercase tracking-widest text-sm transition-all active:brightness-90"
-        >
-          C'est installé, allons-y →
-        </button>
-        <button
-          onClick={onDone}
-          className="w-full py-3 text-sm font-semibold text-center transition-colors"
-          style={{ color: theme.textMuted }}
-        >
-          Passer cette étape
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Composant principal
 // ---------------------------------------------------------------------------
 
 export default function OnboardingOverlay({ tournamentId, tournamentName, teamsMap, teamsLoaded, extraPlayers, template, onComplete }: OnboardingOverlayProps) {
-  const [step, setStep] = useState<0 | 1 | 2>(0)
-  const [selectedJoueur, setSelectedJoueur] = useState<{ id: string; prenom: string } | undefined>()
+  const [step, setStep] = useState<0 | 1>(0)
   const theme = getTheme(template)
 
   function finish(joueur?: { id: string; prenom: string }) {
@@ -519,7 +283,7 @@ export default function OnboardingOverlay({ tournamentId, tournamentName, teamsM
       <div className="shrink-0 h-0.5 w-full bg-white/10">
         <div
           className="h-full transition-all duration-500"
-          style={{ width: step === 0 ? '5%' : step === 1 ? '50%' : '100%', background: theme.accent }}
+          style={{ width: step === 0 ? '5%' : '100%', background: theme.accent }}
         />
       </div>
 
@@ -539,17 +303,8 @@ export default function OnboardingOverlay({ tournamentId, tournamentName, teamsM
             teamsLoaded={teamsLoaded}
             extraPlayers={extraPlayers}
             theme={theme}
-            onSelect={joueur => {
-              setSelectedJoueur(joueur)
-              setStep(2)
-            }}
-            onSkip={() => setStep(2)}
-          />
-        )}
-        {step === 2 && (
-          <SlideHomescreen
-            theme={theme}
-            onDone={() => finish(selectedJoueur)}
+            onSelect={joueur => finish(joueur)}
+            onSkip={() => finish()}
           />
         )}
       </div>

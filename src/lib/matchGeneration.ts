@@ -58,20 +58,60 @@ function buildProvenanceMap(
   graph: TournamentGraph,
 ): Map<string, ProvenanceSlot[]> {
   const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]))
-  const map = new Map<string, ProvenanceSlot[]>()
 
+  // Passe 1 : labels des entrées de chaque nœud (depuis les arêtes entrantes)
+  const nodeInputLabels = new Map<string, Map<number, string>>()
+  for (const edge of graph.edges) {
+    const sourceNode = nodeMap.get(edge.source)
+    if (!sourceNode) continue
+    const outputIndex = parseHandleIndex(edge.sourceHandle)
+    const inputIndex = parseHandleIndex(edge.targetHandle)
+    const output = sourceNode.data.config.outputs.find((o) => o.rank === outputIndex)
+    const label = output
+      ? `${output.label} de ${sourceNode.data.config.name}`
+      : `#${outputIndex} de ${sourceNode.data.config.name}`
+    if (!nodeInputLabels.has(edge.target)) nodeInputLabels.set(edge.target, new Map())
+    nodeInputLabels.get(edge.target)!.set(inputIndex, label)
+  }
+
+  // Passe 2 : construction des provenances pour les nœuds en aval
+  const map = new Map<string, ProvenanceSlot[]>()
   for (const edge of graph.edges) {
     const sourceNode = nodeMap.get(edge.source)
     if (!sourceNode) continue
 
     const outputIndex = parseHandleIndex(edge.sourceHandle)
     const inputIndex = parseHandleIndex(edge.targetHandle)
-    const output = sourceNode.data.config.outputs.find(
-      (o) => o.rank === outputIndex,
-    )
-    const label = output
-      ? `${output.label} de ${sourceNode.data.config.name}`
-      : `#${outputIndex} de ${sourceNode.data.config.name}`
+
+    let label: string
+    const type = sourceNode.data.config.type
+
+    if (type === 'team_builder' || type === 'team_splitter') {
+      // Le label décrit quels slots d'entrée composent cette sortie
+      const pairs = sourceNode.data.config.internalPairs ?? []
+      const inputSlotsForOutput = pairs
+        .filter((p) => p.outputSlot === outputIndex)
+        .map((p) => p.inputSlot)
+        .sort((a, b) => a - b)
+
+      const sourceInputs = nodeInputLabels.get(edge.source) ?? new Map()
+      if (inputSlotsForOutput.length > 0) {
+        label = inputSlotsForOutput
+          .map((slot) => sourceInputs.get(slot) ?? `#${slot}`)
+          .join(' + ')
+      } else {
+        // Fallback si internalPairs non encore définis
+        const output = sourceNode.data.config.outputs.find((o) => o.rank === outputIndex)
+        label = output
+          ? `${output.label} de ${sourceNode.data.config.name}`
+          : `#${outputIndex} de ${sourceNode.data.config.name}`
+      }
+    } else {
+      const output = sourceNode.data.config.outputs.find((o) => o.rank === outputIndex)
+      label = output
+        ? `${output.label} de ${sourceNode.data.config.name}`
+        : `#${outputIndex} de ${sourceNode.data.config.name}`
+    }
 
     const slots = map.get(edge.target) ?? []
     slots.push({ inputIndex, label })
