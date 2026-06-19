@@ -39,11 +39,13 @@ function MatchCard({
   match,
   team1,
   team2,
+  phaseName,
   onTap,
 }: {
   match: Match
   team1: string
   team2: string
+  phaseName: string | undefined
   onTap: () => void
 }) {
   const done = match.statut === 'termine'
@@ -59,13 +61,18 @@ function MatchCard({
       }`}
     >
       <div className="px-3 pt-2.5 pb-2">
-        {/* Heure + phase */}
-        <div className="flex items-center justify-between mb-2">
-          {time && (
-            <span className="text-[10px] font-semibold text-gray-400">{time}</span>
-          )}
+        {/* Heure + phase + badge terminé */}
+        <div className="flex items-center justify-between gap-1 mb-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {time && (
+              <span className="text-[10px] font-semibold text-gray-400 shrink-0">{time}</span>
+            )}
+            {phaseName && (
+              <span className="text-[10px] font-semibold text-gray-400 truncate">{phaseName}</span>
+            )}
+          </div>
           {done && (
-            <span className="ml-auto text-[10px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">
+            <span className="shrink-0 text-[10px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">
               ✓
             </span>
           )}
@@ -124,6 +131,7 @@ export default function LiveBoardPage() {
 
   const tournamentName = useTournamentStore((s) => s.tournamentName)
   const tournamentConfig = useTournamentStore((s) => s.tournamentConfig)
+  const tournamentNodes = useTournamentStore((s) => s.nodes)
   const loadTournament = useTournamentStore((s) => s.loadTournament)
   const resetTournament = useTournamentStore((s) => s.reset)
 
@@ -159,6 +167,11 @@ export default function LiveBoardPage() {
       setTeamNames(map)
     })()
   }, [matches])
+
+  // Map phase_node_id → nom de phase
+  const phaseNames = useMemo(() => {
+    return Object.fromEntries(tournamentNodes.map((n) => [n.id, n.data.config.name]))
+  }, [tournamentNodes])
 
   // Grouper les matchs par piste
   const columns = useMemo(() => {
@@ -247,6 +260,7 @@ export default function LiveBoardPage() {
                       match={m}
                       team1={teamLabel(m, 1, teamNames)}
                       team2={teamLabel(m, 2, teamNames)}
+                      phaseName={m.phase_node_id ? phaseNames[m.phase_node_id] : undefined}
                       onTap={() => setScoreMatch(m)}
                     />
                   ))}
