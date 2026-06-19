@@ -71,6 +71,7 @@ export default function CourtSchedulePage() {
   const matches = useMatchStore((s) => s.matches)
   const isLoading = useMatchStore((s) => s.isLoading)
   const loadMatches = useMatchStore((s) => s.loadMatches)
+  const subscribeToMatches = useMatchStore((s) => s.subscribeToMatches)
   const updateMatchPiste = useMatchStore((s) => s.updateMatchPiste)
   const updateMatchHoraire = useMatchStore((s) => s.updateMatchHoraire)
   const resetMatches = useMatchStore((s) => s.reset)
@@ -91,11 +92,13 @@ export default function CourtSchedulePage() {
     if (!id) return
     loadTournament(id)
     loadMatches(id)
+    const unsubscribe = subscribeToMatches(id)
     return () => {
+      unsubscribe()
       resetTournament()
       resetMatches()
     }
-  }, [id, loadTournament, loadMatches, resetTournament, resetMatches])
+  }, [id, loadTournament, loadMatches, subscribeToMatches, resetTournament, resetMatches])
 
   // Charge les noms des joueurs pour toutes les équipes présentes
   useEffect(() => {
